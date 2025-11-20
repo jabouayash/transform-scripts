@@ -1,5 +1,14 @@
 # Bloomberg Data Transformer - Setup Guide
 
+## Overview
+
+This guide shows you how to set up the Bloomberg NAV Data Transformer **once** on your Windows machine. After setup, you can transform **any daily NAV report** with one click.
+
+**Setup Time:** 10-15 minutes (one time only)
+**Daily Use:** 1 click, 10-30 seconds per report
+
+---
+
 ## Part 1: Installing the VBA Script (Windows)
 
 ### Step 1: Open Your Bloomberg Source File
@@ -283,11 +292,49 @@ wsTarget.Cells(targetRow, 19).FormulaArray = "=BDP(""" & ticker & " " & expiry &
 
 ---
 
+## Part 7: Daily Usage After Setup
+
+Once you've completed the setup above, here's how to use it **every day** with any NAV report:
+
+### Every Morning When NAV Report Arrives:
+
+**Quick Method (If you saved the template):**
+1. Open `Portfolio Transformer.xlsm` (the file you saved in Step 3)
+2. Enable Macros when prompted
+3. File → Open → Open today's NAV export file
+   - Example: `Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_11192025.XLSX`
+4. Click the "Transform NAV Data" button
+5. Wait 10-30 seconds
+6. New file created: `Transformed_Portfolio_19 November 2025.xlsx`
+7. Review your formatted report!
+
+**Alternative Method (Direct from NAV file):**
+1. Open today's NAV export file directly
+2. Press `Alt + F11` → File → Import File
+3. Select `BloombergDataTransformer_v2.vba`
+4. Close VBA Editor
+5. Press `Alt + F8` → Run `TransformBloombergData`
+6. Review output file
+
+### What Works:
+- ✅ **Any NAV file** with the same format (rows 1-5 headers, row 6+ data)
+- ✅ **Any date** - script handles file naming automatically
+- ✅ **Any number of positions** - script processes all rows
+- ✅ **Mixed positions** - stocks, ETFs, options, cash all handled
+
+### What to Check:
+- ✅ Bloomberg Terminal is running and logged in
+- ✅ NAV file has expected format (Product Name in Column A, etc.)
+- ✅ Macros are enabled when opening files
+
+---
+
 ## Next Steps
 
-1. ✅ VBA script created
-2. ⏭️ Test on sample Bloomberg file
-3. ⏭️ Customize for your specific needs
-4. ⏭️ Learn Bloomberg Terminal navigation (see Part 7)
-5. ⏭️ Build Black-Scholes pricer (separate guide)
-6. ⏭️ Learn about call debit spreads (separate guide)
+1. ✅ One-time setup complete
+2. ⏭️ Test with today's NAV file
+3. ⏭️ Verify output format meets your needs
+4. ⏭️ Customize if needed (output location, additional Bloomberg fields)
+5. ⏭️ Use daily with confidence!
+
+**Pro Tip:** Save `Portfolio Transformer.xlsm` to a quick-access location like your Desktop or taskbar for easy daily access.

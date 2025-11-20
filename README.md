@@ -4,6 +4,23 @@ Complete solution for transforming daily NAV calculation files into structured p
 
 ---
 
+## 🎯 At a Glance
+
+**What:** Automated transformation of your daily NAV reports
+**Input:** `Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_[DATE].XLSX`
+**Output:** `Transformed_Portfolio_[DATE].xlsx` with Stocks & Options tabs
+**Time:** One-click, 10-30 seconds
+**Works with:** ANY daily NAV file with the same format
+
+**Key Features:**
+- ✅ Separates stocks from options automatically
+- ✅ Calculates option analytics (strike, expiry, % moneyness, % hedged)
+- ✅ Bloomberg API integration for live prices and Greeks
+- ✅ Handles long and short positions correctly
+- ✅ One-time setup, works forever
+
+---
+
 ## 📋 What This Does
 
 Transforms your daily NAV export from:
@@ -49,35 +66,156 @@ Transforms your daily NAV export from:
 - Daily workflow examples
 - Field reference guide
 
-### 4. `BloombergDataTransformer.vba`
-First version - **deprecated**, use v2 instead
-
 ---
 
 ## 🚀 Quick Start (Windows)
 
-### Step 1: Setup (One Time)
+### Step 1: One-Time Setup
 1. Open Excel on Windows with Bloomberg Terminal running
 2. Press `Alt + F11` to open VBA Editor
 3. Insert → Module
 4. Copy all code from `BloombergDataTransformer_v2.vba`
 5. Paste into the module
 6. Save as "Portfolio Transformer.xlsm" (macro-enabled)
+   - Save location: `C:\Bloomberg\Portfolio Transformer.xlsm` (or your preferred location)
 
-### Step 2: Add Button (Optional)
+### Step 2: Add Button (Optional but Recommended)
 1. Developer tab → Insert → Button
 2. Assign macro: `TransformBloombergData`
 3. Label it: "Transform NAV Data"
+4. Close and save the workbook
 
-### Step 3: Daily Use
-1. Open your NAV export file:
-   - `Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_[DATE].xlsx`
-2. Click your "Transform NAV Data" button (or press `Alt + F8` → Run)
-3. Script creates new file:
-   - `Transformed_Portfolio_[DATE].xlsx`
-   - With "Stocks" and "Options" tabs
+---
 
-**Done!** Review your formatted portfolio report.
+## 📅 Daily Workflow - Transform ANY NAV Report
+
+Every day when you receive your NAV export file:
+
+### Method 1: Using the Saved Template (Easiest)
+
+**Step 1:** Download/save your daily NAV export
+- File format: `Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_[DATE].XLSX`
+- Example: `Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_11102025.XLSX`
+- Save to: Your Downloads folder or a dedicated NAV folder
+
+**Step 2:** Open the saved transformer
+1. Open `Portfolio Transformer.xlsm` (the file you saved in setup)
+2. When prompted "Enable Macros" → Click **Enable**
+
+**Step 3:** Open today's NAV file
+1. File → Open → Select today's NAV export file
+2. The NAV file opens in a new window
+
+**Step 4:** Transform
+1. Make sure the NAV file is the active window (click on it)
+2. Click the "Transform NAV Data" button you created
+   - OR press `Alt + F8` → Select `TransformBloombergData` → Run
+3. Wait 10-30 seconds (depending on position count)
+
+**Step 5:** Review output
+- New file created: `Transformed_Portfolio_DD MMMM YYYY.xlsx`
+- Location: Same folder as the source NAV file
+- Contains:
+  - **Stocks Tab:** All equity positions with Bloomberg live prices
+  - **Options Tab:** All options separated into PUTS and CALLS sections
+
+**Done!** Close the original NAV file (don't need to save it).
+
+### Method 2: Direct from NAV File
+
+**Alternative approach if you prefer:**
+
+**Step 1:** Open today's NAV export file directly
+- Double-click `Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_[DATE].XLSX`
+
+**Step 2:** Load the macro
+1. Press `Alt + F11` to open VBA Editor
+2. File → Import File
+3. Select `BloombergDataTransformer_v2.vba`
+4. Close VBA Editor
+
+**Step 3:** Run transformation
+1. Press `Alt + F8`
+2. Select `TransformBloombergData`
+3. Click Run
+
+**Step 4:** Review output (same as Method 1)
+
+---
+
+## 📂 File Naming & Organization
+
+### Expected Source File Format
+Your NAV system exports files with this naming pattern:
+```
+Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_[MMDDYYYY].XLSX
+```
+
+Examples:
+- `Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_11052025.XLSX` (Nov 5, 2025)
+- `Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_11102025.XLSX` (Nov 10, 2025)
+
+### Output File Naming
+The script automatically creates:
+```
+Transformed_Portfolio_DD MMMM YYYY.xlsx
+```
+
+Examples:
+- `Transformed_Portfolio_05 November 2025.xlsx`
+- `Transformed_Portfolio_10 November 2025.xlsx`
+
+**Note:** If a file with the same name exists, the script adds a timestamp:
+```
+Transformed_Portfolio_YYYYMMDD_HHMMSS.xlsx
+```
+
+### Recommended Folder Structure
+
+```
+C:\Bloomberg\
+├── Portfolio Transformer.xlsm          ← Your saved template with macro
+├── NAV Reports\
+│   ├── Gain And Exposure_..._11052025.XLSX
+│   ├── Gain And Exposure_..._11102025.XLSX
+│   └── Gain And Exposure_..._11152025.XLSX
+└── Transformed Reports\
+    ├── Transformed_Portfolio_05 November 2025.xlsx
+    ├── Transformed_Portfolio_10 November 2025.xlsx
+    └── Transformed_Portfolio_15 November 2025.xlsx
+```
+
+**Tip:** Customize output path in VBA (see Customization Options below)
+
+---
+
+## ✅ File Format Requirements
+
+The script works with **any** NAV export file that has this structure:
+
+**Required Structure:**
+- **Rows 1-3:** Empty/formatting (ignored)
+- **Row 4:** Sub-headers (Unit Cost, Today, etc.)
+- **Row 5:** Column headers (Product Name, Ticker, ISIN, etc.)
+- **Row 6+:** Position data (stocks, options, cash)
+
+**Required Columns:**
+| Column | Header | Required | Used For |
+|--------|--------|----------|----------|
+| A | Product Name | ✅ Yes | Identify stocks vs options |
+| B | Ticker | ✅ Yes | OCC format for Bloomberg API |
+| C | ISIN | Optional | Reference only |
+| D | Portfolio Weight % | ✅ Yes | Output |
+| E | Unit Cost USD | ✅ Yes | Output |
+| F | Today USD | ✅ Yes | Current price |
+| G | % Daily Gain/Loss | Optional | Skipped |
+| H | Contribution to Performance | ✅ Yes | Attribution |
+| I | Total Cost USD | ✅ Yes | Output |
+| J | Market Value USD | ✅ Yes | Output |
+| K | Total Net P&L YTD | ✅ Yes | Output |
+| L | # of Shares | ✅ Yes | Critical for matching |
+
+**As long as your daily NAV exports follow this format, the script will work!**
 
 ---
 
