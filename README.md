@@ -17,6 +17,9 @@ Complete solution for transforming daily NAV calculation files into structured p
 - ✅ Calculates option analytics (strike, expiry, % moneyness, % hedged)
 - ✅ Bloomberg API integration for live prices and Greeks
 - ✅ Handles long and short positions correctly
+- ✅ **% Diff (Cost)** - gain/loss vs cost basis for each position
+- ✅ **Daily Change %** - today's price movement
+- ✅ **Fund Performance** - YTD/MTD returns from DailyRor report
 - ✅ One-time setup, works forever
 
 ---
@@ -41,14 +44,17 @@ Transforms your daily NAV export from:
 
 ## 📁 Files Delivered
 
-### 1. `BloombergDataTransformer_v2.vba` ⭐ **USE THIS ONE**
+### 1. `BloombergDataTransformer_v3.vba` ⭐ **USE THIS ONE (Latest)**
 **Production-ready VBA script** with:
 - ✅ Uses OCC ticker format from Column B (reliable)
 - ✅ Handles negative quantities (short positions)
 - ✅ Matches options to underlying stocks automatically
 - ✅ Bloomberg API integration for live data
 - ✅ Calculates % Hedged, % Moneyness, % Yield
-- ✅ Proper formatting and error handling
+- ✅ **NEW: % Diff (Cost)** column - shows gain/loss vs cost basis
+- ✅ **NEW: Daily Chg %** column - daily price change from NAV
+- ✅ **NEW: Multi-file support** - automatically reads DailyRor report for performance data
+- ✅ **NEW: Bottom totals section** - YTD/MTD returns, NAV per share, total portfolio value
 
 ### 2. `SETUP_GUIDE.md`
 **Complete Windows setup instructions:**
@@ -74,7 +80,7 @@ Transforms your daily NAV export from:
 1. Open Excel on Windows with Bloomberg Terminal running
 2. Press `Alt + F11` to open VBA Editor
 3. Insert → Module
-4. Copy all code from `BloombergDataTransformer_v2.vba`
+4. Copy all code from `BloombergDataTransformer_v3.vba` ← **Use v3!**
 5. Paste into the module
 6. Save as "Portfolio Transformer.xlsm" (macro-enabled)
    - Save location: `C:\Bloomberg\Portfolio Transformer.xlsm` (or your preferred location)
@@ -89,13 +95,25 @@ Transforms your daily NAV export from:
 
 ## 📅 Daily Workflow - Transform ANY NAV Report
 
-Every day when you receive your NAV export file:
+Every day when you receive your NAV export files:
+
+### Required Files (Place in Same Folder)
+
+For full functionality, place these files in the **same folder**:
+
+| File | Required? | Purpose |
+|------|-----------|---------|
+| `Gain And Exposure_Custom_MOBIUS..._[DATE].XLSX` | ✅ Required | Main NAV data (positions) |
+| `..._1003_DailyRor_[DATE].xls` | Optional | Fund performance (YTD, MTD, NAV/share) |
+
+**Note:** The script uses `1003_DailyRor` (NOT `1003_A_DailyRor`). The `_A` version is a sub-account.
 
 ### Method 1: Using the Saved Template (Easiest)
 
-**Step 1:** Download/save your daily NAV export
-- File format: `Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_[DATE].XLSX`
-- Example: `Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_11102025.XLSX`
+**Step 1:** Download/save your daily NAV reports
+- Save ALL daily reports to the **same folder**
+- Primary: `Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_[DATE].XLSX`
+- Performance (optional): `..._1003_DailyRor_[DATE].xls`
 - Save to: Your Downloads folder or a dedicated NAV folder
 
 **Step 2:** Open the saved transformer
