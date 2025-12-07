@@ -1,7 +1,11 @@
 ' ====================================================================
-' Bloomberg Portfolio Data Transformer - Version 5
+' Bloomberg Portfolio Data Transformer - Version 5.1
 ' ====================================================================
-' WHAT'S NEW IN V5:
+' WHAT'S NEW IN V5.1:
+'   - FX conversion for non-USD tickers (JP, LN, etc.)
+'   - Japanese stocks now display prices in USD
+'
+' PREVIOUS (V5):
 '   - Professional formatting matching input file styling
 '   - Navy blue sub-headers with white text
 '   - Alternating row colors (white/light gray zebra striping)
@@ -256,7 +260,7 @@ Sub TransformBloombergData()
         msg = msg & "  Total Equity: " & Format(totalEquity, "$#,##0")
     End If
 
-    MsgBox msg, vbInformation, "Bloomberg Data Transformer v5"
+    MsgBox msg, vbInformation, "Bloomberg Data Transformer v5.1"
 
     Exit Sub
 
@@ -624,10 +628,20 @@ Sub ProcessStock(wsSource As Worksheet, sourceRow As Long, wsTarget As Worksheet
     wsTarget.Cells(targetRow, 5).Value = wsSource.Cells(sourceRow, 5).Value  ' Unit Cost
 
     Dim ticker As String
+    Dim fxCurrency As String
     ticker = Trim(CStr(wsSource.Cells(sourceRow, 2).Value))
 
     If ticker <> "" And InStr(ticker, " ") > 0 Then
-        wsTarget.Cells(targetRow, 6).FormulaArray = "=BDP(""" & ticker & " Equity"",""PX_LAST"")"
+        ' Check if foreign ticker needs FX conversion
+        fxCurrency = GetFXCurrency(ticker)
+
+        If fxCurrency <> "" Then
+            ' Foreign ticker: multiply price by FX rate to convert to USD
+            wsTarget.Cells(targetRow, 6).FormulaArray = "=BDP(""" & ticker & " Equity"",""PX_LAST"")*BDP(""" & fxCurrency & "USD Curncy"",""PX_LAST"")"
+        Else
+            ' USD ticker: use price directly
+            wsTarget.Cells(targetRow, 6).FormulaArray = "=BDP(""" & ticker & " Equity"",""PX_LAST"")"
+        End If
     Else
         wsTarget.Cells(targetRow, 6).Value = wsSource.Cells(sourceRow, 6).Value
     End If
@@ -640,6 +654,61 @@ Sub ProcessStock(wsSource As Worksheet, sourceRow As Long, wsTarget As Worksheet
     wsTarget.Cells(targetRow, 12).Value = wsSource.Cells(sourceRow, 4).Value  ' Portfolio Wgt
     wsTarget.Cells(targetRow, 13).Value = wsSource.Cells(sourceRow, 8).Value  ' Attribution
 End Sub
+
+' ====================================================================
+' CURRENCY HELPER - Returns FX currency code for non-USD tickers
+' ====================================================================
+Function GetFXCurrency(ticker As String) As String
+    Dim suffix As String
+    Dim spacePos As Long
+
+    ' Extract the exchange suffix (e.g., "JP" from "2644 JP")
+    spacePos = InStr(ticker, " ")
+    If spacePos > 0 Then
+        suffix = UCase(Trim(Mid(ticker, spacePos + 1)))
+    Else
+        GetFXCurrency = ""
+        Exit Function
+    End If
+
+    ' Map exchange suffix to currency
+    Select Case suffix
+        Case "JP"   ' Japan
+            GetFXCurrency = "JPY"
+        Case "LN"   ' London
+            GetFXCurrency = "GBP"
+        Case "GY", "GR"  ' Germany
+            GetFXCurrency = "EUR"
+        Case "FP"   ' France
+            GetFXCurrency = "EUR"
+        Case "IM"   ' Italy
+            GetFXCurrency = "EUR"
+        Case "SM"   ' Spain
+            GetFXCurrency = "EUR"
+        Case "NA"   ' Netherlands
+            GetFXCurrency = "EUR"
+        Case "AV"   ' Austria
+            GetFXCurrency = "EUR"
+        Case "SW"   ' Switzerland
+            GetFXCurrency = "CHF"
+        Case "CN"   ' Canada
+            GetFXCurrency = "CAD"
+        Case "AU"   ' Australia
+            GetFXCurrency = "AUD"
+        Case "HK"   ' Hong Kong
+            GetFXCurrency = "HKD"
+        Case "SP"   ' Singapore
+            GetFXCurrency = "SGD"
+        Case "KS"   ' Korea
+            GetFXCurrency = "KRW"
+        Case "TT"   ' Taiwan
+            GetFXCurrency = "TWD"
+        Case "US", "UN", "UA", "UQ", "UW"  ' US exchanges
+            GetFXCurrency = ""  ' No conversion needed
+        Case Else
+            GetFXCurrency = ""  ' Default: assume USD or unknown
+    End Select
+End Function
 
 Sub ProcessOption(wsSource As Worksheet, sourceRow As Long, wsTarget As Worksheet, targetRow As Long, optionType As String)
     Dim productName As String
