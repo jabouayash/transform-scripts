@@ -1,7 +1,13 @@
 ' ====================================================================
-' Bloomberg Portfolio Data Transformer - Version 4
+' Bloomberg Portfolio Data Transformer - Version 5
 ' ====================================================================
-' WHAT'S NEW IN V4:
+' WHAT'S NEW IN V5:
+'   - Professional formatting matching input file styling
+'   - Navy blue sub-headers with white text
+'   - Alternating row colors (white/light gray zebra striping)
+'   - Consistent font colors and borders
+'
+' PREVIOUS (V4):
 '   - Integration with Outlook email monitor (automatic triggering)
 '   - Reads YTD Fund Return from non-custom "Gain And Exposure" file (K94)
 '   - Output saved to C:\Mobius Reports\Transformed\ folder
@@ -34,6 +40,20 @@ Option Explicit
 ' ============================================
 Private Const OUTPUT_FOLDER As String = "C:\Mobius Reports\Transformed\"
 Private Const INCOMING_FOLDER As String = "C:\Mobius Reports\Incoming\"
+
+' ============================================
+' COLOR SCHEME (matching input file styling)
+' ============================================
+' Navy blue for sub-headers: #003366 = RGB(0, 51, 102)
+Private Const COLOR_NAVY_BLUE As Long = 6697728    ' RGB(0, 51, 102) as Long
+' White for sub-header text and alternating rows
+Private Const COLOR_WHITE As Long = 16777215       ' RGB(255, 255, 255)
+' Light gray for alternating rows: #F2F2F2
+Private Const COLOR_LIGHT_GRAY As Long = 15921906  ' RGB(242, 242, 242)
+' Dark gray for data text: #404040
+Private Const COLOR_DARK_GRAY As Long = 4210752    ' RGB(64, 64, 64)
+' Gray for header text: #595959
+Private Const COLOR_HEADER_GRAY As Long = 5855577  ' RGB(89, 89, 89)
 
 ' ============================================
 ' GLOBAL VARIABLES
@@ -236,7 +256,7 @@ Sub TransformBloombergData()
         msg = msg & "  Total Equity: " & Format(totalEquity, "$#,##0")
     End If
 
-    MsgBox msg, vbInformation, "Bloomberg Data Transformer v4"
+    MsgBox msg, vbInformation, "Bloomberg Data Transformer v5"
 
     Exit Sub
 
@@ -507,6 +527,7 @@ End Function
 ' ====================================================================
 
 Sub SetupStocksHeaders(ws As Worksheet)
+    ' Row 2: Column headers (bold gray text)
     ws.Cells(2, 2).Value = "Name"
     ws.Cells(2, 3).Value = "Ticker"
     ws.Cells(2, 4).Value = "Quantity"
@@ -520,6 +541,7 @@ Sub SetupStocksHeaders(ws As Worksheet)
     ws.Cells(2, 12).Value = "Portfolio Wgt"
     ws.Cells(2, 13).Value = "Attribution"
 
+    ' Row 3: Sub-headers (navy blue background, white text)
     ws.Cells(3, 5).Value = "USD"
     ws.Cells(3, 6).Value = "USD"
     ws.Cells(3, 7).Value = "USD"
@@ -528,23 +550,37 @@ Sub SetupStocksHeaders(ws As Worksheet)
     ws.Cells(3, 12).Value = "%"
     ws.Cells(3, 13).Value = "%"
 
-    With ws.Range("B2:M3")
+    ' Format header row (row 2) - bold gray text
+    With ws.Range("B2:M2")
         .Font.Bold = True
+        .Font.Color = COLOR_HEADER_GRAY
+        .HorizontalAlignment = xlCenter
+    End With
+
+    ' Format sub-header row (row 3) - navy blue background, white text
+    With ws.Range("B3:M3")
+        .Font.Bold = True
+        .Font.Color = COLOR_WHITE
+        .Interior.Color = COLOR_NAVY_BLUE
         .HorizontalAlignment = xlCenter
     End With
 End Sub
 
 Sub SetupOptionsHeaders(ws As Worksheet)
+    ' Row 2: Section title "PUTS"
     ws.Cells(2, 2).Value = "PUTS"
     ws.Cells(2, 2).Font.Bold = True
     ws.Cells(2, 2).Font.Size = 12
+    ws.Cells(2, 2).Font.Color = COLOR_HEADER_GRAY
 
+    ' Row 3: Column group headers (navy blue background, white text)
     ws.Cells(3, 10).Value = "Unit Cost"
     ws.Cells(3, 12).Value = "Total Cost"
     ws.Cells(3, 13).Value = "Current Px"
     ws.Cells(3, 14).Value = "Mkt Value"
     ws.Cells(3, 15).Value = "P&L"
 
+    ' Row 4: Sub-headers with units
     ws.Cells(4, 2).Value = "Name"
     ws.Cells(4, 3).Value = "Quantity"
     ws.Cells(4, 4).Value = "Underlying Qty"
@@ -560,8 +596,19 @@ Sub SetupOptionsHeaders(ws As Worksheet)
     ws.Cells(4, 14).Value = "USD"
     ws.Cells(4, 15).Value = "YTD"
 
-    With ws.Range("B3:O4")
+    ' Format row 3 - navy blue background, white text for column group headers
+    With ws.Range("J3:O3")
         .Font.Bold = True
+        .Font.Color = COLOR_WHITE
+        .Interior.Color = COLOR_NAVY_BLUE
+        .HorizontalAlignment = xlCenter
+    End With
+
+    ' Format row 4 - navy blue background, white text for sub-headers
+    With ws.Range("B4:O4")
+        .Font.Bold = True
+        .Font.Color = COLOR_WHITE
+        .Interior.Color = COLOR_NAVY_BLUE
         .HorizontalAlignment = xlCenter
     End With
 End Sub
@@ -748,26 +795,50 @@ End Sub
 ' ====================================================================
 
 Sub FormatStocksSheet(ws As Worksheet, lastRow As Long)
+    Dim i As Long
+
     If lastRow > 4 Then
+        ' Number formats
         ws.Range("D4:D" & lastRow).NumberFormat = "#,##0"
         ws.Range("E4:H" & lastRow).NumberFormat = "$#,##0.00"
         ws.Range("I4:I" & lastRow).NumberFormat = "0.00%"
         ws.Range("J4:J" & lastRow).NumberFormat = "0.00%"
         ws.Range("K4:K" & lastRow).NumberFormat = "#,##0"
         ws.Range("L4:M" & lastRow).NumberFormat = "0.00%"
+
+        ' Apply alternating row colors (zebra striping) and font color
+        For i = 4 To lastRow
+            With ws.Range("B" & i & ":M" & i)
+                .Font.Color = COLOR_DARK_GRAY
+                If (i Mod 2) = 0 Then
+                    .Interior.Color = COLOR_WHITE
+                Else
+                    .Interior.Color = COLOR_LIGHT_GRAY
+                End If
+            End With
+        Next i
     End If
 
     ws.Columns("B:M").AutoFit
 
+    ' Add borders
     If lastRow > 4 Then
-        ws.Range("B2:M" & lastRow).Borders.LineStyle = xlContinuous
+        With ws.Range("B2:M" & lastRow).Borders
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .Color = RGB(200, 200, 200)
+        End With
     End If
 End Sub
 
 Sub FormatOptionsSheet(ws As Worksheet, lastPutRow As Long, lastCallRow As Long)
     Dim lastRow As Long
+    Dim i As Long
+    Dim callHeaderRow As Long
+
     lastRow = Application.Max(lastPutRow, lastCallRow)
 
+    ' Number formats
     ws.Range("C:C").NumberFormat = "#,##0"
     ws.Range("D:D").NumberFormat = "#,##0"
     ws.Range("E:E").NumberFormat = "0.00%"
@@ -779,9 +850,63 @@ Sub FormatOptionsSheet(ws As Worksheet, lastPutRow As Long, lastCallRow As Long)
     ws.Range("L:N").NumberFormat = "$#,##0"
     ws.Range("O:O").NumberFormat = "#,##0"
 
+    ' Find CALLS header row (it's 2 rows after the last PUT)
+    callHeaderRow = lastPutRow + 2
+
+    ' Apply alternating row colors for PUTS section (starting row 5)
+    For i = 5 To lastPutRow
+        With ws.Range("B" & i & ":O" & i)
+            .Font.Color = COLOR_DARK_GRAY
+            If (i Mod 2) = 1 Then
+                .Interior.Color = COLOR_WHITE
+            Else
+                .Interior.Color = COLOR_LIGHT_GRAY
+            End If
+        End With
+    Next i
+
+    ' Format CALLS header row with navy blue
+    If callHeaderRow > 5 Then
+        ' CALLS title
+        ws.Cells(callHeaderRow - 1, 2).Font.Color = COLOR_HEADER_GRAY
+
+        ' CALLS sub-header row - navy blue background
+        With ws.Range("B" & callHeaderRow & ":O" & callHeaderRow)
+            .Font.Bold = True
+            .Font.Color = COLOR_WHITE
+            .Interior.Color = COLOR_NAVY_BLUE
+            .HorizontalAlignment = xlCenter
+        End With
+
+        ' Format column group headers for CALLS section
+        With ws.Range("J" & (callHeaderRow - 1) & ":O" & (callHeaderRow - 1))
+            .Font.Bold = True
+            .Font.Color = COLOR_WHITE
+            .Interior.Color = COLOR_NAVY_BLUE
+            .HorizontalAlignment = xlCenter
+        End With
+
+        ' Apply alternating row colors for CALLS section
+        For i = callHeaderRow + 1 To lastCallRow
+            With ws.Range("B" & i & ":O" & i)
+                .Font.Color = COLOR_DARK_GRAY
+                If (i Mod 2) = 0 Then
+                    .Interior.Color = COLOR_WHITE
+                Else
+                    .Interior.Color = COLOR_LIGHT_GRAY
+                End If
+            End With
+        Next i
+    End If
+
     ws.Columns("B:O").AutoFit
 
+    ' Add borders
     If lastRow > 4 Then
-        ws.Range("B2:O" & lastRow).Borders.LineStyle = xlContinuous
+        With ws.Range("B2:O" & lastRow).Borders
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .Color = RGB(200, 200, 200)
+        End With
     End If
 End Sub

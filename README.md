@@ -106,6 +106,18 @@ Added at bottom of Stocks tab:
 - YTD Fund Return (from K94 of non-custom file)
 - MTD Net Return
 
+### Output Formatting
+
+The transformed output matches the professional styling of the input files:
+
+| Element | Style |
+|---------|-------|
+| **Sub-headers** | Navy blue background (`#003366`) with white text |
+| **Column headers** | Bold, gray text (`#595959`) |
+| **Data rows** | Alternating white (`#FFFFFF`) and light gray (`#F2F2F2`) zebra striping |
+| **Data text** | Dark gray (`#404040`) |
+| **Borders** | Light gray thin borders |
+
 ## Prerequisites
 
 - Windows 10/11
