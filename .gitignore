@@ -1,6 +1,9 @@
 # Ignore sensitive fund reports
 reports/
 
+# Python virtual environment (if used for testing)
+.venv/
+
 # macOS
 .DS_Store
 

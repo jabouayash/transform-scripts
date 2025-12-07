@@ -1,44 +1,60 @@
 ' ====================================================================
-' Bloomberg Portfolio Data Transformer - Version 3
+' Bloomberg Portfolio Data Transformer - Version 4
 ' ====================================================================
-' WHAT'S NEW IN V3:
-'   - Added "% Diff (Cost)" column: (Current Price - Unit Cost) / Unit Cost
-'   - Added "Daily Chg %" column: From NAV source Column G
-'   - Added bottom totals section with YTD/MTD performance from DailyRor file
-'   - Multi-file support: Reads performance data from DailyRor report
+' WHAT'S NEW IN V4:
+'   - Integration with Outlook email monitor (automatic triggering)
+'   - Reads YTD Fund Return from non-custom "Gain And Exposure" file (K94)
+'   - Output saved to C:\Mobius Reports\Transformed\ folder
+'   - Can be run manually or triggered by Outlook VBA
 '
 ' DATA SOURCES:
-'   - Primary: Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_[DATE].XLSX
-'   - Performance: Mobius Emerging Opportunities Fund Ltd._United Overseas Bank Limited_1003_DailyRor_[DATE].xls
-'     (Note: Using 1003_DailyRor, NOT 1003_A_DailyRor - the A version is a sub-account)
+'   1. Primary: Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_[DATE].XLSX
+'      - Contains: Position details, P&L, weights, # of shares
+'   2. Performance: Gain And Exposure_MOBIUS EMERGING OPPORTUNITIES FUND LP_[DATE].XLSX
+'      - Contains: K94 = YTD Fund Return (e.g., 3.74%)
+'   3. Optional: DailyRor file for MTD/additional metrics
 '
-' USAGE:
-'   1. Place both files in the same folder
-'   2. Open the NAV file (Gain And Exposure_Custom_...)
-'   3. Run TransformBloombergData macro
-'   4. Script automatically finds and reads the DailyRor file
+' USAGE (Manual):
+'   1. Open the Custom NAV file
+'   2. Run TransformBloombergData macro
+'   3. Script finds matching non-custom file automatically
 '
-' COLUMN LAYOUT (Stocks Tab):
-'   B: Name | C: Ticker | D: Quantity | E: Unit Cost | F: Current Px
-'   G: Total Cost | H: Mkt Value | I: % Diff (Cost) | J: Daily Chg %
-'   K: P&L | L: Portfolio Wgt | M: Attribution
+' USAGE (Automatic via Outlook):
+'   1. Outlook monitor detects both emails
+'   2. Saves attachments to C:\Mobius Reports\Incoming\
+'   3. Calls SetDailyFilePath with the non-custom file path
+'   4. Calls TransformBloombergData
 '
-' BOTTOM SECTION (Stocks Tab):
-'   - Total Portfolio Value
-'   - Fund Inception Date (March 2025)
-'   - YTD Net Return (from DailyRor)
-'   - MTD Net Return (from DailyRor)
 ' ====================================================================
 
 Option Explicit
 
-' Global variables
-Dim stockPositions As Object ' Dictionary: ticker -> shares
-Dim ytdReturn As Double      ' YTD return from DailyRor
-Dim mtdReturn As Double      ' MTD return from DailyRor
-Dim totalEquity As Double    ' Total portfolio value from DailyRor
-Dim navPerShare As Double    ' NAV per share from DailyRor
-Dim performanceDataFound As Boolean ' Flag if DailyRor was found
+' ============================================
+' CONFIGURATION
+' ============================================
+Private Const OUTPUT_FOLDER As String = "C:\Mobius Reports\Transformed\"
+Private Const INCOMING_FOLDER As String = "C:\Mobius Reports\Incoming\"
+
+' ============================================
+' GLOBAL VARIABLES
+' ============================================
+Dim stockPositions As Object      ' Dictionary: ticker -> shares
+Dim ytdReturn As Double           ' YTD return from DailyRor
+Dim mtdReturn As Double           ' MTD return from DailyRor
+Dim totalEquity As Double         ' Total portfolio value
+Dim navPerShare As Double         ' NAV per share
+Dim performanceDataFound As Boolean
+Dim dailyFilePath As String       ' Path to non-custom file (set by Outlook or found automatically)
+Dim ytdFundReturn As Double       ' YTD Fund Return from K94 of non-custom file
+Dim ytdFundReturnFound As Boolean ' Flag if K94 was found
+
+' ============================================
+' OUTLOOK INTEGRATION - Called by Outlook VBA
+' ============================================
+Public Sub SetDailyFilePath(filePath As String)
+    ' Called by Outlook VBA to set the path to the non-custom file
+    dailyFilePath = filePath
+End Sub
 
 ' ====================================================================
 ' MAIN TRANSFORMATION PROCEDURE
@@ -54,6 +70,7 @@ Sub TransformBloombergData()
     Dim outputPath As String
     Dim todayDate As String
     Dim sourceFolder As String
+    Dim reportDate As String
 
     On Error GoTo ErrorHandler
 
@@ -62,16 +79,24 @@ Sub TransformBloombergData()
     Application.Calculation = xlCalculationManual
     Set stockPositions = CreateObject("Scripting.Dictionary")
     performanceDataFound = False
+    ytdFundReturnFound = False
     ytdReturn = 0
     mtdReturn = 0
     totalEquity = 0
     navPerShare = 0
+    ytdFundReturn = 0
 
-    ' Get the source worksheet
+    ' Get the source worksheet (Custom file should be active)
     Set wsSource = ActiveSheet
     sourceFolder = ActiveWorkbook.Path & "\"
 
-    ' Try to find and read DailyRor file
+    ' Extract date from filename for finding matching files
+    reportDate = ExtractDateFromFilename(ActiveWorkbook.Name)
+
+    ' Try to find and read the non-custom file for K94 (YTD Fund Return)
+    Call ReadYTDFundReturn(sourceFolder, reportDate)
+
+    ' Try to find and read DailyRor file for additional metrics
     Call ReadDailyRorData(sourceFolder)
 
     ' Find last row with data
@@ -170,12 +195,20 @@ Sub TransformBloombergData()
     Call FormatStocksSheet(wsStocks, stockRow)
     Call FormatOptionsSheet(wsOptions, putRow, callRow)
 
-    ' Save output
+    ' Determine output path
+    ' Use OUTPUT_FOLDER if it exists, otherwise use source folder
+    Dim savePath As String
+    If Dir(OUTPUT_FOLDER, vbDirectory) <> "" Then
+        savePath = OUTPUT_FOLDER
+    Else
+        savePath = sourceFolder
+    End If
+
     todayDate = Format(Date, "DD MMMM YYYY")
-    outputPath = sourceFolder & "Transformed_Portfolio_" & todayDate & ".xlsx"
+    outputPath = savePath & "Transformed_Portfolio_" & todayDate & ".xlsx"
 
     If Dir(outputPath) <> "" Then
-        outputPath = sourceFolder & "Transformed_Portfolio_" & Format(Now, "YYYYMMDD_HHMMSS") & ".xlsx"
+        outputPath = savePath & "Transformed_Portfolio_" & Format(Now, "YYYYMMDD_HHMMSS") & ".xlsx"
     End If
 
     wbOutput.SaveAs outputPath
@@ -191,18 +224,19 @@ Sub TransformBloombergData()
     msg = msg & "Stocks processed: " & (stockRow - 4) & vbCrLf
     msg = msg & "Options processed: " & (putRow - 5 + callRow - (putRow + optionPutRows + 3)) & vbCrLf & vbCrLf
 
-    If performanceDataFound Then
-        msg = msg & "Performance data loaded from DailyRor file:" & vbCrLf
-        msg = msg & "  YTD Return: " & Format(ytdReturn, "0.00%") & vbCrLf
-        msg = msg & "  MTD Return: " & Format(mtdReturn, "0.00%") & vbCrLf
-        msg = msg & "  Total Equity: " & Format(totalEquity, "$#,##0")
+    msg = msg & "Performance Data:" & vbCrLf
+    If ytdFundReturnFound Then
+        msg = msg & "  YTD Fund Return (K94): " & Format(ytdFundReturn, "0.00%") & vbCrLf
     Else
-        msg = msg & "NOTE: DailyRor file not found in folder." & vbCrLf
-        msg = msg & "Performance data not included." & vbCrLf
-        msg = msg & "Expected file: *_1003_DailyRor_*.xls"
+        msg = msg & "  YTD Fund Return: Not found (non-custom file missing)" & vbCrLf
     End If
 
-    MsgBox msg, vbInformation, "Bloomberg Data Transformer v3"
+    If performanceDataFound Then
+        msg = msg & "  MTD Return (DailyRor): " & Format(mtdReturn, "0.00%") & vbCrLf
+        msg = msg & "  Total Equity: " & Format(totalEquity, "$#,##0")
+    End If
+
+    MsgBox msg, vbInformation, "Bloomberg Data Transformer v4"
 
     Exit Sub
 
@@ -213,7 +247,100 @@ ErrorHandler:
 End Sub
 
 ' ====================================================================
-' READ DAILYROR FILE FOR PERFORMANCE DATA
+' READ YTD FUND RETURN FROM NON-CUSTOM FILE (K94)
+' ====================================================================
+Sub ReadYTDFundReturn(folderPath As String, reportDate As String)
+    Dim fileName As String
+    Dim filePath As String
+    Dim wbDaily As Workbook
+    Dim wsDaily As Worksheet
+    Dim k94Value As Variant
+
+    On Error GoTo NotFound
+
+    ' If Outlook already set the path, use it
+    If dailyFilePath <> "" And Dir(dailyFilePath) <> "" Then
+        filePath = dailyFilePath
+    Else
+        ' Try to find the non-custom file in the same folder
+        ' Pattern: Gain And Exposure_MOBIUS EMERGING OPPORTUNITIES FUND LP_MMDDYYYY.XLSX
+        ' (Note: NO "Custom_" in the name)
+
+        fileName = Dir(folderPath & "Gain And Exposure_MOBIUS EMERGING OPPORTUNITIES FUND LP_" & reportDate & ".XLSX")
+
+        If fileName = "" Then
+            ' Try incoming folder
+            fileName = Dir(INCOMING_FOLDER & "Gain And Exposure_MOBIUS EMERGING OPPORTUNITIES FUND LP_" & reportDate & ".XLSX")
+            If fileName <> "" Then
+                filePath = INCOMING_FOLDER & fileName
+            End If
+        Else
+            filePath = folderPath & fileName
+        End If
+    End If
+
+    If filePath = "" Or Dir(filePath) = "" Then
+        ytdFundReturnFound = False
+        Exit Sub
+    End If
+
+    ' Open the non-custom file
+    Set wbDaily = Workbooks.Open(filePath, ReadOnly:=True, UpdateLinks:=False)
+    Set wsDaily = wbDaily.Sheets(1)
+
+    ' Read K94 - YTD ROR
+    k94Value = wsDaily.Cells(94, 11).Value  ' Column K = 11
+
+    If IsNumeric(k94Value) Then
+        ytdFundReturn = CDbl(k94Value)
+        ytdFundReturnFound = True
+    Else
+        ytdFundReturnFound = False
+    End If
+
+    ' Also grab total equity from H94 if available
+    If IsNumeric(wsDaily.Cells(94, 8).Value) Then
+        totalEquity = CDbl(wsDaily.Cells(94, 8).Value)
+    End If
+
+    wbDaily.Close SaveChanges:=False
+
+    Exit Sub
+
+NotFound:
+    ytdFundReturnFound = False
+    On Error GoTo 0
+End Sub
+
+' ====================================================================
+' EXTRACT DATE FROM FILENAME
+' ====================================================================
+Function ExtractDateFromFilename(fileName As String) As String
+    ' Extract MMDDYYYY from filename like:
+    ' "Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_11262025.XLSX"
+
+    Dim pos As Long
+    Dim dateStr As String
+
+    ' Find the underscore before the date
+    pos = InStrRev(fileName, "_")
+
+    If pos > 0 Then
+        ' Extract 8 characters after the underscore (MMDDYYYY)
+        dateStr = Mid(fileName, pos + 1, 8)
+
+        If IsNumeric(dateStr) And Len(dateStr) = 8 Then
+            ExtractDateFromFilename = dateStr
+        Else
+            ExtractDateFromFilename = ""
+        End If
+    Else
+        ExtractDateFromFilename = ""
+    End If
+End Function
+
+' ====================================================================
+' READ DAILYROR FILE FOR ADDITIONAL PERFORMANCE DATA
 ' ====================================================================
 Sub ReadDailyRorData(folderPath As String)
     Dim fileName As String
@@ -228,8 +355,21 @@ Sub ReadDailyRorData(folderPath As String)
     fileName = Dir(folderPath & "*_1003_DailyRor_*.xls")
 
     If fileName = "" Then
+        ' Try incoming folder
+        fileName = Dir(INCOMING_FOLDER & "*_1003_DailyRor_*.xls")
+        If fileName <> "" Then
+            filePath = INCOMING_FOLDER & fileName
+        End If
+    Else
+        filePath = folderPath & fileName
+    End If
+
+    If fileName = "" Then
         ' Try alternative pattern
         fileName = Dir(folderPath & "*DailyRor*.xls")
+        If fileName <> "" Then
+            filePath = folderPath & fileName
+        End If
     End If
 
     If fileName = "" Then
@@ -239,7 +379,6 @@ Sub ReadDailyRorData(folderPath As String)
 
     ' Make sure we don't get the _A version
     If InStr(fileName, "_A_DailyRor") > 0 Then
-        ' Skip _A version, look for next match
         fileName = Dir()
         Do While fileName <> ""
             If InStr(fileName, "_A_DailyRor") = 0 And InStr(fileName, "DailyRor") > 0 Then
@@ -254,22 +393,18 @@ Sub ReadDailyRorData(folderPath As String)
         Exit Sub
     End If
 
-    filePath = folderPath & fileName
+    If filePath = "" Then filePath = folderPath & fileName
 
     ' Open DailyRor workbook
     Set wbRor = Workbooks.Open(filePath, ReadOnly:=True, UpdateLinks:=False)
     Set wsRor = wbRor.Sheets(1)
 
-    ' Find data row (Row 13 or 14 based on our analysis)
-    ' Structure: Row 12 = Headers, Row 13/14 = Data
-    ' Columns: A=Date, B=Ending Equity, D=MTD Return, F=YTD Return, I=NAV Per Share
-
+    ' Find data row (Row 13 or 14)
     For i = 13 To 20
         If IsNumeric(wsRor.Cells(i, 2).Value) And wsRor.Cells(i, 2).Value > 0 Then
-            ' Found data row - get the LAST row with data (most recent)
-            totalEquity = wsRor.Cells(i, 2).Value
+            If totalEquity = 0 Then totalEquity = wsRor.Cells(i, 2).Value
             mtdReturn = wsRor.Cells(i, 4).Value
-            ytdReturn = wsRor.Cells(i, 6).Value
+            If Not ytdFundReturnFound Then ytdReturn = wsRor.Cells(i, 6).Value
             navPerShare = wsRor.Cells(i, 9).Value
         End If
     Next i
@@ -368,11 +503,10 @@ Function GetUnderlyingShares(optionTicker As String) As Variant
 End Function
 
 ' ====================================================================
-' SETUP HEADERS - UPDATED FOR V3
+' SETUP HEADERS
 ' ====================================================================
 
 Sub SetupStocksHeaders(ws As Worksheet)
-    ' Row 2 - Main headers
     ws.Cells(2, 2).Value = "Name"
     ws.Cells(2, 3).Value = "Ticker"
     ws.Cells(2, 4).Value = "Quantity"
@@ -380,19 +514,16 @@ Sub SetupStocksHeaders(ws As Worksheet)
     ws.Cells(2, 6).Value = "Current Px"
     ws.Cells(2, 7).Value = "Total Cost"
     ws.Cells(2, 8).Value = "Mkt Value"
-    ws.Cells(2, 9).Value = "% Diff (Cost)"    ' NEW
-    ws.Cells(2, 10).Value = "Daily Chg %"     ' NEW
+    ws.Cells(2, 9).Value = "% Diff (Cost)"
+    ws.Cells(2, 10).Value = "Daily Chg %"
     ws.Cells(2, 11).Value = "P&L"
     ws.Cells(2, 12).Value = "Portfolio Wgt"
     ws.Cells(2, 13).Value = "Attribution"
 
-    ' Row 3 - Sub headers
     ws.Cells(3, 5).Value = "USD"
     ws.Cells(3, 6).Value = "USD"
     ws.Cells(3, 7).Value = "USD"
     ws.Cells(3, 8).Value = "USD"
-    ws.Cells(3, 9).Value = ""                 ' NEW
-    ws.Cells(3, 10).Value = ""                ' NEW
     ws.Cells(3, 11).Value = "YTD"
     ws.Cells(3, 12).Value = "%"
     ws.Cells(3, 13).Value = "%"
@@ -404,7 +535,6 @@ Sub SetupStocksHeaders(ws As Worksheet)
 End Sub
 
 Sub SetupOptionsHeaders(ws As Worksheet)
-    ' PUTS Section
     ws.Cells(2, 2).Value = "PUTS"
     ws.Cells(2, 2).Font.Bold = True
     ws.Cells(2, 2).Font.Size = 12
@@ -437,30 +567,15 @@ Sub SetupOptionsHeaders(ws As Worksheet)
 End Sub
 
 ' ====================================================================
-' PROCESS DATA ROWS - UPDATED FOR V3
+' PROCESS DATA ROWS
 ' ====================================================================
 
 Sub ProcessStock(wsSource As Worksheet, sourceRow As Long, wsTarget As Worksheet, targetRow As Long)
-    ' Column mapping - UPDATED FOR V3:
-    ' A: Product Name -> B: Name
-    ' B: Ticker -> C: Ticker
-    ' L: # of Shares -> D: Quantity
-    ' E: Unit Cost USD -> E: Unit Cost USD
-    ' F: Today USD -> F: Current Px USD (Bloomberg)
-    ' I: Total Cost USD -> G: Total Cost USD
-    ' Calculated -> H: Mkt Value (=F*D)
-    ' Calculated -> I: % Diff (Cost) = (F-E)/E  *** NEW ***
-    ' G: % Daily Gain/Loss -> J: Daily Chg %   *** NEW ***
-    ' K: Total Net P&L YTD -> K: P&L
-    ' D: Portfolio Weight % -> L: Portfolio Wgt
-    ' H: Contribution -> M: Attribution
-
     wsTarget.Cells(targetRow, 2).Value = wsSource.Cells(sourceRow, 1).Value  ' Name
     wsTarget.Cells(targetRow, 3).Value = wsSource.Cells(sourceRow, 2).Value  ' Ticker
     wsTarget.Cells(targetRow, 4).Value = wsSource.Cells(sourceRow, 12).Value ' Quantity
     wsTarget.Cells(targetRow, 5).Value = wsSource.Cells(sourceRow, 5).Value  ' Unit Cost
 
-    ' Current Price - Bloomberg
     Dim ticker As String
     ticker = Trim(CStr(wsSource.Cells(sourceRow, 2).Value))
 
@@ -471,16 +586,9 @@ Sub ProcessStock(wsSource As Worksheet, sourceRow As Long, wsTarget As Worksheet
     End If
 
     wsTarget.Cells(targetRow, 7).Value = wsSource.Cells(sourceRow, 9).Value  ' Total Cost
-
-    ' Market Value formula
     wsTarget.Cells(targetRow, 8).Formula = "=F" & targetRow & "*D" & targetRow
-
-    ' *** NEW: % Diff (Cost) = (Current Price - Unit Cost) / Unit Cost ***
     wsTarget.Cells(targetRow, 9).Formula = "=(F" & targetRow & "-E" & targetRow & ")/E" & targetRow
-
-    ' *** NEW: Daily Change % from source Column G ***
     wsTarget.Cells(targetRow, 10).Value = wsSource.Cells(sourceRow, 7).Value
-
     wsTarget.Cells(targetRow, 11).Value = wsSource.Cells(sourceRow, 11).Value ' P&L
     wsTarget.Cells(targetRow, 12).Value = wsSource.Cells(sourceRow, 4).Value  ' Portfolio Wgt
     wsTarget.Cells(targetRow, 13).Value = wsSource.Cells(sourceRow, 8).Value  ' Attribution
@@ -556,15 +664,12 @@ Sub AddCashPositions(wsSource As Worksheet, wsTarget As Worksheet, startRow As L
 End Sub
 
 ' ====================================================================
-' ADD BOTTOM TOTALS SECTION - NEW IN V3
+' ADD BOTTOM TOTALS SECTION - UPDATED FOR V4
 ' ====================================================================
 
 Sub AddBottomTotals(ws As Worksheet, startRow As Long)
     Dim r As Long
-    r = startRow
-
-    ' Add some spacing
-    r = r + 1
+    r = startRow + 1
 
     ' Section header
     ws.Cells(r, 2).Value = "FUND PERFORMANCE SUMMARY"
@@ -575,22 +680,22 @@ Sub AddBottomTotals(ws As Worksheet, startRow As Long)
     ' Total Portfolio Value
     ws.Cells(r, 2).Value = "Total Portfolio Value:"
     ws.Cells(r, 2).Font.Bold = True
-    If performanceDataFound And totalEquity > 0 Then
+    If totalEquity > 0 Then
         ws.Cells(r, 4).Value = totalEquity
         ws.Cells(r, 4).NumberFormat = "$#,##0"
     Else
-        ws.Cells(r, 4).Value = "(See DailyRor report)"
+        ws.Cells(r, 4).Value = "(Not available)"
     End If
     r = r + 1
 
     ' NAV Per Share
     ws.Cells(r, 2).Value = "NAV Per Share:"
     ws.Cells(r, 2).Font.Bold = True
-    If performanceDataFound And navPerShare > 0 Then
+    If navPerShare > 0 Then
         ws.Cells(r, 4).Value = navPerShare
         ws.Cells(r, 4).NumberFormat = "$#,##0.00"
     Else
-        ws.Cells(r, 4).Value = "(See DailyRor report)"
+        ws.Cells(r, 4).Value = "(Not available)"
     End If
     r = r + 1
 
@@ -600,46 +705,54 @@ Sub AddBottomTotals(ws As Worksheet, startRow As Long)
     ws.Cells(r, 4).Value = "March 2025"
     r = r + 1
 
-    ' YTD Net Return
-    ws.Cells(r, 2).Value = "YTD Net Return:"
+    ' YTD Fund Return (from K94 - PRIMARY SOURCE)
+    ws.Cells(r, 2).Value = "YTD Fund Return:"
     ws.Cells(r, 2).Font.Bold = True
-    If performanceDataFound Then
+    If ytdFundReturnFound Then
+        ws.Cells(r, 4).Value = ytdFundReturn
+        ws.Cells(r, 4).NumberFormat = "0.00%"
+        ws.Cells(r, 5).Value = "(from Gain & Exposure report)"
+        ws.Cells(r, 5).Font.Italic = True
+        ws.Cells(r, 5).Font.Color = RGB(128, 128, 128)
+    ElseIf performanceDataFound And ytdReturn <> 0 Then
         ws.Cells(r, 4).Value = ytdReturn
         ws.Cells(r, 4).NumberFormat = "0.00%"
+        ws.Cells(r, 5).Value = "(from DailyRor)"
+        ws.Cells(r, 5).Font.Italic = True
+        ws.Cells(r, 5).Font.Color = RGB(128, 128, 128)
     Else
-        ws.Cells(r, 4).Value = "(DailyRor file not found)"
+        ws.Cells(r, 4).Value = "(Not available)"
     End If
     r = r + 1
 
     ' MTD Net Return
     ws.Cells(r, 2).Value = "MTD Net Return:"
     ws.Cells(r, 2).Font.Bold = True
-    If performanceDataFound Then
+    If performanceDataFound And mtdReturn <> 0 Then
         ws.Cells(r, 4).Value = mtdReturn
         ws.Cells(r, 4).NumberFormat = "0.00%"
     Else
-        ws.Cells(r, 4).Value = "(DailyRor file not found)"
+        ws.Cells(r, 4).Value = "(Not available)"
     End If
     r = r + 1
 
     ' Data Source Note
     r = r + 1
-    ws.Cells(r, 2).Value = "Performance data source:"
-    ws.Cells(r, 3).Value = "DailyRor_1003 report (not _A version)"
+    ws.Cells(r, 2).Value = "Report generated: " & Format(Now, "MMMM D, YYYY h:mm AM/PM")
     ws.Cells(r, 2).Font.Italic = True
-    ws.Cells(r, 3).Font.Italic = True
+    ws.Cells(r, 2).Font.Color = RGB(128, 128, 128)
 End Sub
 
 ' ====================================================================
-' FORMATTING - UPDATED FOR V3
+' FORMATTING
 ' ====================================================================
 
 Sub FormatStocksSheet(ws As Worksheet, lastRow As Long)
     If lastRow > 4 Then
         ws.Range("D4:D" & lastRow).NumberFormat = "#,##0"
         ws.Range("E4:H" & lastRow).NumberFormat = "$#,##0.00"
-        ws.Range("I4:I" & lastRow).NumberFormat = "0.00%"      ' % Diff (Cost)
-        ws.Range("J4:J" & lastRow).NumberFormat = "0.00%"      ' Daily Chg %
+        ws.Range("I4:I" & lastRow).NumberFormat = "0.00%"
+        ws.Range("J4:J" & lastRow).NumberFormat = "0.00%"
         ws.Range("K4:K" & lastRow).NumberFormat = "#,##0"
         ws.Range("L4:M" & lastRow).NumberFormat = "0.00%"
     End If
