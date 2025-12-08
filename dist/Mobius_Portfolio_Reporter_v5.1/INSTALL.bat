@@ -22,10 +22,10 @@ echo  Folders created and files copied!
 echo ==========================================
 echo.
 echo NEXT STEPS:
-echo 1. Open docs\SETUP_GUIDE.md for detailed instructions
+echo 1. Open docs\SETUP_GUIDE.pdf for detailed instructions
 echo 2. Set up the Outlook email monitor (paste code from files\OutlookMonitor.txt)
 echo 3. Enable Bloomberg Excel Add-in
 echo.
 echo Press any key to open the setup guide...
 pause >nul
-start "" "%~dp0docs\SETUP_GUIDE.md"
+start "" "%~dp0docs\SETUP_GUIDE.pdf"
