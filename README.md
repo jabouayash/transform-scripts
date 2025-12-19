@@ -63,40 +63,42 @@ This system monitors Outlook for incoming daily report emails, extracts attachme
 `C:\Mobius Reports\Transformed\Transformed_Portfolio_DD MMMM YYYY.xlsx`
 
 ### Stocks Tab
-| Column | Description |
-|--------|-------------|
-| Name | Security name |
-| Ticker | Bloomberg ticker |
-| Quantity | # of shares |
-| Unit Cost | Average cost (USD) |
-| Current Px | Live price via Bloomberg BDP() |
-| Total Cost | Cost basis (USD) |
-| Mkt Value | Current value (calculated) |
-| % Diff (Cost) | Gain/loss vs cost basis |
-| Daily Chg % | Today's price change |
-| P&L | Year-to-date P&L |
-| Portfolio Wgt | Position weight % |
-| Attribution | Performance contribution % |
+| Column | Header | Description |
+|--------|--------|-------------|
+| A | Name | Security name |
+| B | Ticker | Bloomberg ticker |
+| C | Portfolio Wgt | Position weight % |
+| D | % Diff (Cost) | Gain/loss vs cost basis |
+| E | Daily Chg % | Today's price change |
+| F | Unit Cost | Average cost (USD, rounded to nearest dollar) |
+| G | Current Px | Live price via Bloomberg BDP() (USD, rounded) |
+| H | Total Cost | Cost basis (USD, rounded) |
+| I | Mkt Value | Current value (USD, rounded) |
+| J | P&L | Year-to-date P&L (USD) |
+| K | Attribution | Performance contribution % |
+
+Note: All currency values display as numbers only (no $ symbols). Headers indicate USD.
 
 ### Options Tab
 Separated into PUTS and CALLS sections:
 
-| Column | Description |
-|--------|-------------|
-| Name | Option description (e.g., META 01/16/2026 PUT 700) |
-| Quantity | # of contracts |
-| Underlying Qty | Shares of underlying stock owned |
-| % Hedged | Coverage ratio |
-| Strike Px | Strike price |
-| Underlying Px | Live underlying price via Bloomberg |
-| % Moneyness | ITM/OTM percentage |
-| Expiry | Expiration date |
-| Unit Cost | Average cost per contract |
-| % Yield | Premium yield |
-| Total Cost | Total cost basis |
-| Current Px | Current option price |
-| Mkt Value | Current market value |
-| P&L | Year-to-date P&L |
+| Column | Header | Description |
+|--------|--------|-------------|
+| A | Name | Option description (e.g., META 01/16/2026 PUT 700) |
+| B | Quantity | # of contracts |
+| C | Underlying Qty | Shares of underlying stock owned |
+| D | % Hedged | Coverage ratio |
+| E | Strike Px | Strike price (USD) |
+| F | Underlying Px | Live underlying price via Bloomberg (USD) |
+| G | % Moneyness | ITM/OTM percentage |
+| H | Expiry | Expiration date |
+| I | Unit Cost | Average cost per contract (USD) |
+| J | Total Cost | Total cost basis (USD) |
+| K | Current Px | Current option price (USD) |
+| L | Mkt Value | Current market value (USD) |
+| M | P&L ($) | Year-to-date P&L (USD) |
+
+Note: All currency values display as numbers only (no $ symbols). Headers indicate USD.
 
 ### Fund Performance Summary
 Added at bottom of Stocks tab:
@@ -171,10 +173,17 @@ Once set up, the system runs automatically:
 3. Excel transformation runs automatically
 4. Output saved to `C:\Mobius Reports\Transformed\`
 
-### Manual Processing
+### Manual Processing (via Outlook)
 To process emails manually:
 1. Select an email in Outlook
 2. Press `Alt + F8` → `ProcessSelectedEmail` → Run
+
+### Manual Processing (without email)
+To test or run the transformation directly:
+1. Open the Custom NAV file from `C:\Mobius Reports\Incoming\`
+2. Make sure `Portfolio Transformer.xlsm` is also open
+3. Press `Alt + F8` → `TransformBloombergData` → Run
+4. Output appears in `C:\Mobius Reports\Transformed\`
 
 ### Testing with Forwarded Emails
 The system handles `FW:`, `Fwd:`, and `RE:` prefixes (including multiples like `FW: FW: FW:`), so you can test by forwarding old emails to yourself.
