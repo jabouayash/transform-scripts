@@ -1,7 +1,16 @@
 ' ====================================================================
-' Bloomberg Portfolio Data Transformer - Version 5.1
+' Bloomberg Portfolio Data Transformer - Version 5.2
 ' ====================================================================
-' WHAT'S NEW IN V5.1:
+' WHAT'S NEW IN V5.2:
+'   - Removed blank column A (data starts in column A now)
+'   - Reordered columns: Name, Ticker, Portfolio Wgt, % Diff, Daily Chg, Unit Cost, Current Px, etc.
+'   - Removed currency symbols from cells (numbers only, headers show USD)
+'   - Narrower Name column (30 width)
+'   - Rounded prices to nearest dollar
+'   - Fixed Japan FX conversion (was showing wrong % returns)
+'   - Options: Removed Yield % column, added ($) to P&L header
+'
+' PREVIOUS (V5.1):
 '   - FX conversion for non-USD tickers (JP, LN, etc.)
 '   - Japanese stocks now display prices in USD
 '
@@ -179,12 +188,12 @@ Sub TransformBloombergData()
     ' Set starting row for calls
     callRow = putRow + optionPutRows + 2
 
-    ' Add CALLS header
-    wsOptions.Cells(callRow - 1, 2).Value = "CALLS"
-    wsOptions.Cells(callRow - 1, 2).Font.Bold = True
-    wsOptions.Cells(callRow - 1, 2).Font.Size = 12
-    wsOptions.Range("J3:O4").Copy wsOptions.Range("J" & (callRow - 1))
-    wsOptions.Range("B4:O4").Copy wsOptions.Range("B" & callRow)
+    ' Add CALLS header (column A, new structure I-M)
+    wsOptions.Cells(callRow - 1, 1).Value = "CALLS"
+    wsOptions.Cells(callRow - 1, 1).Font.Bold = True
+    wsOptions.Cells(callRow - 1, 1).Font.Size = 12
+    wsOptions.Range("I3:M3").Copy wsOptions.Range("I" & (callRow - 1))
+    wsOptions.Range("A4:M4").Copy wsOptions.Range("A" & callRow)
     callRow = callRow + 1
 
     putRow = 5
@@ -260,7 +269,7 @@ Sub TransformBloombergData()
         msg = msg & "  Total Equity: " & Format(totalEquity, "$#,##0")
     End If
 
-    MsgBox msg, vbInformation, "Bloomberg Data Transformer v5.1"
+    MsgBox msg, vbInformation, "Bloomberg Data Transformer v5.2"
 
     Exit Sub
 
@@ -532,37 +541,39 @@ End Function
 
 Sub SetupStocksHeaders(ws As Worksheet)
     ' Row 2: Column headers (bold gray text)
-    ws.Cells(2, 2).Value = "Name"
-    ws.Cells(2, 3).Value = "Ticker"
-    ws.Cells(2, 4).Value = "Quantity"
-    ws.Cells(2, 5).Value = "Unit Cost"
-    ws.Cells(2, 6).Value = "Current Px"
-    ws.Cells(2, 7).Value = "Total Cost"
-    ws.Cells(2, 8).Value = "Mkt Value"
-    ws.Cells(2, 9).Value = "% Diff (Cost)"
-    ws.Cells(2, 10).Value = "Daily Chg %"
-    ws.Cells(2, 11).Value = "P&L"
-    ws.Cells(2, 12).Value = "Portfolio Wgt"
-    ws.Cells(2, 13).Value = "Attribution"
+    ' NEW ORDER: Name, Ticker, Portfolio Wgt, % Diff, Daily Chg %, Unit Cost, Current Px, Total Cost, Mkt Value, P&L, Attribution
+    ws.Cells(2, 1).Value = "Name"
+    ws.Cells(2, 2).Value = "Ticker"
+    ws.Cells(2, 3).Value = "Portfolio Wgt"
+    ws.Cells(2, 4).Value = "% Diff (Cost)"
+    ws.Cells(2, 5).Value = "Daily Chg %"
+    ws.Cells(2, 6).Value = "Unit Cost"
+    ws.Cells(2, 7).Value = "Current Px"
+    ws.Cells(2, 8).Value = "Total Cost"
+    ws.Cells(2, 9).Value = "Mkt Value"
+    ws.Cells(2, 10).Value = "P&L"
+    ws.Cells(2, 11).Value = "Attribution"
 
     ' Row 3: Sub-headers (navy blue background, white text)
-    ws.Cells(3, 5).Value = "USD"
+    ws.Cells(3, 3).Value = "%"
+    ws.Cells(3, 4).Value = "%"
+    ws.Cells(3, 5).Value = "%"
     ws.Cells(3, 6).Value = "USD"
     ws.Cells(3, 7).Value = "USD"
     ws.Cells(3, 8).Value = "USD"
-    ws.Cells(3, 11).Value = "YTD"
-    ws.Cells(3, 12).Value = "%"
-    ws.Cells(3, 13).Value = "%"
+    ws.Cells(3, 9).Value = "USD"
+    ws.Cells(3, 10).Value = "YTD"
+    ws.Cells(3, 11).Value = "%"
 
     ' Format header row (row 2) - bold gray text
-    With ws.Range("B2:M2")
+    With ws.Range("A2:K2")
         .Font.Bold = True
         .Font.Color = COLOR_HEADER_GRAY
         .HorizontalAlignment = xlCenter
     End With
 
     ' Format sub-header row (row 3) - navy blue background, white text
-    With ws.Range("B3:M3")
+    With ws.Range("A3:K3")
         .Font.Bold = True
         .Font.Color = COLOR_WHITE
         .Interior.Color = COLOR_NAVY_BLUE
@@ -572,36 +583,36 @@ End Sub
 
 Sub SetupOptionsHeaders(ws As Worksheet)
     ' Row 2: Section title "PUTS"
-    ws.Cells(2, 2).Value = "PUTS"
-    ws.Cells(2, 2).Font.Bold = True
-    ws.Cells(2, 2).Font.Size = 12
-    ws.Cells(2, 2).Font.Color = COLOR_HEADER_GRAY
+    ws.Cells(2, 1).Value = "PUTS"
+    ws.Cells(2, 1).Font.Bold = True
+    ws.Cells(2, 1).Font.Size = 12
+    ws.Cells(2, 1).Font.Color = COLOR_HEADER_GRAY
 
     ' Row 3: Column group headers (navy blue background, white text)
-    ws.Cells(3, 10).Value = "Unit Cost"
-    ws.Cells(3, 12).Value = "Total Cost"
-    ws.Cells(3, 13).Value = "Current Px"
-    ws.Cells(3, 14).Value = "Mkt Value"
-    ws.Cells(3, 15).Value = "P&L"
+    ' NEW: No Yield column, starts at A
+    ws.Cells(3, 9).Value = "Unit Cost"
+    ws.Cells(3, 10).Value = "Total Cost"
+    ws.Cells(3, 11).Value = "Current Px"
+    ws.Cells(3, 12).Value = "Mkt Value"
+    ws.Cells(3, 13).Value = "P&L ($)"
 
-    ' Row 4: Sub-headers with units
-    ws.Cells(4, 2).Value = "Name"
-    ws.Cells(4, 3).Value = "Quantity"
-    ws.Cells(4, 4).Value = "Underlying Qty"
-    ws.Cells(4, 5).Value = "% Hedged"
-    ws.Cells(4, 6).Value = "Strike Px"
-    ws.Cells(4, 7).Value = "Underlying Px"
-    ws.Cells(4, 8).Value = "% Moneyness"
-    ws.Cells(4, 9).Value = "Expiry"
+    ' Row 4: Sub-headers with units (NO Yield % column)
+    ws.Cells(4, 1).Value = "Name"
+    ws.Cells(4, 2).Value = "Quantity"
+    ws.Cells(4, 3).Value = "Underlying Qty"
+    ws.Cells(4, 4).Value = "% Hedged"
+    ws.Cells(4, 5).Value = "Strike Px"
+    ws.Cells(4, 6).Value = "Underlying Px"
+    ws.Cells(4, 7).Value = "% Moneyness"
+    ws.Cells(4, 8).Value = "Expiry"
+    ws.Cells(4, 9).Value = "USD"
     ws.Cells(4, 10).Value = "USD"
-    ws.Cells(4, 11).Value = "% Yield"
+    ws.Cells(4, 11).Value = "USD"
     ws.Cells(4, 12).Value = "USD"
-    ws.Cells(4, 13).Value = "USD"
-    ws.Cells(4, 14).Value = "USD"
-    ws.Cells(4, 15).Value = "YTD"
+    ws.Cells(4, 13).Value = "YTD"
 
     ' Format row 3 - navy blue background, white text for column group headers
-    With ws.Range("J3:O3")
+    With ws.Range("I3:M3")
         .Font.Bold = True
         .Font.Color = COLOR_WHITE
         .Interior.Color = COLOR_NAVY_BLUE
@@ -609,7 +620,7 @@ Sub SetupOptionsHeaders(ws As Worksheet)
     End With
 
     ' Format row 4 - navy blue background, white text for sub-headers
-    With ws.Range("B4:O4")
+    With ws.Range("A4:M4")
         .Font.Bold = True
         .Font.Color = COLOR_WHITE
         .Interior.Color = COLOR_NAVY_BLUE
@@ -622,37 +633,45 @@ End Sub
 ' ====================================================================
 
 Sub ProcessStock(wsSource As Worksheet, sourceRow As Long, wsTarget As Worksheet, targetRow As Long)
-    wsTarget.Cells(targetRow, 2).Value = wsSource.Cells(sourceRow, 1).Value  ' Name
-    wsTarget.Cells(targetRow, 3).Value = wsSource.Cells(sourceRow, 2).Value  ' Ticker
-    wsTarget.Cells(targetRow, 4).Value = wsSource.Cells(sourceRow, 12).Value ' Quantity
-    wsTarget.Cells(targetRow, 5).Value = wsSource.Cells(sourceRow, 5).Value  ' Unit Cost
+    ' NEW COLUMN ORDER (starting at A):
+    ' A=Name, B=Ticker, C=Portfolio Wgt, D=% Diff, E=Daily Chg, F=Unit Cost, G=Current Px, H=Total Cost, I=Mkt Value, J=P&L, K=Attribution
 
     Dim ticker As String
     Dim fxCurrency As String
-    ticker = Trim(CStr(wsSource.Cells(sourceRow, 2).Value))
+    Dim quantity As Double
 
+    ticker = Trim(CStr(wsSource.Cells(sourceRow, 2).Value))
+    quantity = wsSource.Cells(sourceRow, 12).Value
+
+    wsTarget.Cells(targetRow, 1).Value = wsSource.Cells(sourceRow, 1).Value  ' A: Name
+    wsTarget.Cells(targetRow, 2).Value = wsSource.Cells(sourceRow, 2).Value  ' B: Ticker
+    wsTarget.Cells(targetRow, 3).Value = wsSource.Cells(sourceRow, 4).Value  ' C: Portfolio Wgt
+    ' D: % Diff (Cost) - formula set below after Current Px
+    wsTarget.Cells(targetRow, 5).Value = wsSource.Cells(sourceRow, 7).Value  ' E: Daily Chg %
+    wsTarget.Cells(targetRow, 6).Value = wsSource.Cells(sourceRow, 5).Value  ' F: Unit Cost
+
+    ' G: Current Px - Bloomberg formula with FX conversion if needed
+    ' NOTE: Unit Cost from source file is in USD. We convert foreign prices to USD for comparison.
     If ticker <> "" And InStr(ticker, " ") > 0 Then
-        ' Check if foreign ticker needs FX conversion
         fxCurrency = GetFXCurrency(ticker)
 
         If fxCurrency <> "" Then
-            ' Foreign ticker: multiply price by FX rate to convert to USD
-            wsTarget.Cells(targetRow, 6).FormulaArray = "=BDP(""" & ticker & " Equity"",""PX_LAST"")*BDP(""" & fxCurrency & "USD Curncy"",""PX_LAST"")"
+            ' Foreign ticker: multiply local price by FX rate to convert to USD
+            ' Example: "JPY Curncy" returns USD per 1 JPY (~0.0067)
+            wsTarget.Cells(targetRow, 7).Formula = "=BDP(""" & ticker & " Equity"",""PX_LAST"")*BDP(""" & fxCurrency & " Curncy"",""PX_LAST"")"
         Else
             ' USD ticker: use price directly
-            wsTarget.Cells(targetRow, 6).FormulaArray = "=BDP(""" & ticker & " Equity"",""PX_LAST"")"
+            wsTarget.Cells(targetRow, 7).Formula = "=BDP(""" & ticker & " Equity"",""PX_LAST"")"
         End If
     Else
-        wsTarget.Cells(targetRow, 6).Value = wsSource.Cells(sourceRow, 6).Value
+        wsTarget.Cells(targetRow, 7).Value = wsSource.Cells(sourceRow, 6).Value
     End If
 
-    wsTarget.Cells(targetRow, 7).Value = wsSource.Cells(sourceRow, 9).Value  ' Total Cost
-    wsTarget.Cells(targetRow, 8).Formula = "=F" & targetRow & "*D" & targetRow
-    wsTarget.Cells(targetRow, 9).Formula = "=(F" & targetRow & "-E" & targetRow & ")/E" & targetRow
-    wsTarget.Cells(targetRow, 10).Value = wsSource.Cells(sourceRow, 7).Value
-    wsTarget.Cells(targetRow, 11).Value = wsSource.Cells(sourceRow, 11).Value ' P&L
-    wsTarget.Cells(targetRow, 12).Value = wsSource.Cells(sourceRow, 4).Value  ' Portfolio Wgt
-    wsTarget.Cells(targetRow, 13).Value = wsSource.Cells(sourceRow, 8).Value  ' Attribution
+    wsTarget.Cells(targetRow, 8).Value = wsSource.Cells(sourceRow, 9).Value  ' H: Total Cost
+    wsTarget.Cells(targetRow, 9).Formula = "=G" & targetRow & "*" & quantity  ' I: Mkt Value = Current Px * Quantity
+    wsTarget.Cells(targetRow, 4).Formula = "=(G" & targetRow & "-F" & targetRow & ")/F" & targetRow  ' D: % Diff (Cost)
+    wsTarget.Cells(targetRow, 10).Value = wsSource.Cells(sourceRow, 11).Value ' J: P&L
+    wsTarget.Cells(targetRow, 11).Value = wsSource.Cells(sourceRow, 8).Value  ' K: Attribution
 End Sub
 
 ' ====================================================================
@@ -711,6 +730,9 @@ Function GetFXCurrency(ticker As String) As String
 End Function
 
 Sub ProcessOption(wsSource As Worksheet, sourceRow As Long, wsTarget As Worksheet, targetRow As Long, optionType As String)
+    ' NEW COLUMN ORDER (starting at A, NO Yield column):
+    ' A=Name, B=Quantity, C=Underlying Qty, D=% Hedged, E=Strike Px, F=Underlying Px, G=% Moneyness, H=Expiry, I=Unit Cost, J=Total Cost, K=Current Px, L=Mkt Value, M=P&L
+
     Dim productName As String
     Dim occTicker As String
     Dim quantity As Variant
@@ -728,38 +750,40 @@ Sub ProcessOption(wsSource As Worksheet, sourceRow As Long, wsTarget As Workshee
 
     underlyingQty = GetUnderlyingShares(baseTicker)
 
-    wsTarget.Cells(targetRow, 2).Value = productName
-    wsTarget.Cells(targetRow, 3).Value = quantity
-    wsTarget.Cells(targetRow, 4).Value = underlyingQty
+    wsTarget.Cells(targetRow, 1).Value = productName           ' A: Name
+    wsTarget.Cells(targetRow, 2).Value = quantity              ' B: Quantity
+    wsTarget.Cells(targetRow, 3).Value = underlyingQty         ' C: Underlying Qty
 
+    ' D: % Hedged
     If underlyingQty <> 0 Then
         If optionType = "PUT" Then
-            wsTarget.Cells(targetRow, 5).Formula = "=$C" & targetRow & "*100/$D" & targetRow
+            wsTarget.Cells(targetRow, 4).Formula = "=$B" & targetRow & "*100/$C" & targetRow
         Else
-            wsTarget.Cells(targetRow, 5).Formula = "=-$C" & targetRow & "*100/$D" & targetRow
+            wsTarget.Cells(targetRow, 4).Formula = "=-$B" & targetRow & "*100/$C" & targetRow
         End If
     Else
-        wsTarget.Cells(targetRow, 5).Value = "N/A"
+        wsTarget.Cells(targetRow, 4).Value = "N/A"
     End If
 
+    ' E: Strike Px
     If IsNumeric(strike) Then
-        wsTarget.Cells(targetRow, 6).Value = CDbl(strike)
+        wsTarget.Cells(targetRow, 5).Value = CDbl(strike)
     Else
-        wsTarget.Cells(targetRow, 6).Value = strike
+        wsTarget.Cells(targetRow, 5).Value = strike
     End If
 
+    ' F: Underlying Px (Bloomberg formula)
     If occTicker <> "" Then
-        wsTarget.Cells(targetRow, 7).FormulaArray = "=BDP(""" & occTicker & " Equity"",""OPT_UNDL_PX"")"
+        wsTarget.Cells(targetRow, 6).FormulaArray = "=BDP(""" & occTicker & " Equity"",""OPT_UNDL_PX"")"
     End If
 
-    wsTarget.Cells(targetRow, 8).Formula = "=(G" & targetRow & "-F" & targetRow & ")/F" & targetRow
-    wsTarget.Cells(targetRow, 9).Value = expiry
-    wsTarget.Cells(targetRow, 10).Value = wsSource.Cells(sourceRow, 5).Value
-    wsTarget.Cells(targetRow, 11).Formula = "=J" & targetRow & "/G" & targetRow
-    wsTarget.Cells(targetRow, 12).Value = wsSource.Cells(sourceRow, 9).Value
-    wsTarget.Cells(targetRow, 13).Value = wsSource.Cells(sourceRow, 6).Value
-    wsTarget.Cells(targetRow, 14).Value = wsSource.Cells(sourceRow, 10).Value
-    wsTarget.Cells(targetRow, 15).Value = wsSource.Cells(sourceRow, 11).Value
+    wsTarget.Cells(targetRow, 7).Formula = "=(F" & targetRow & "-E" & targetRow & ")/E" & targetRow  ' G: % Moneyness
+    wsTarget.Cells(targetRow, 8).Value = expiry                ' H: Expiry
+    wsTarget.Cells(targetRow, 9).Value = wsSource.Cells(sourceRow, 5).Value   ' I: Unit Cost
+    wsTarget.Cells(targetRow, 10).Value = wsSource.Cells(sourceRow, 9).Value  ' J: Total Cost
+    wsTarget.Cells(targetRow, 11).Value = wsSource.Cells(sourceRow, 6).Value  ' K: Current Px
+    wsTarget.Cells(targetRow, 12).Value = wsSource.Cells(sourceRow, 10).Value ' L: Mkt Value
+    wsTarget.Cells(targetRow, 13).Value = wsSource.Cells(sourceRow, 11).Value ' M: P&L YTD
 End Sub
 
 Sub AddCashPositions(wsSource As Worksheet, wsTarget As Worksheet, startRow As Long, lastRow As Long)
@@ -772,8 +796,8 @@ Sub AddCashPositions(wsSource As Worksheet, wsTarget As Worksheet, startRow As L
     For i = 6 To lastRow
         productName = Trim(CStr(wsSource.Cells(i, 1).Value))
         If productName = "USD" Or productName = "JPY" Or productName = "CAD" Or productName = "EUR" Or productName = "GBP" Then
-            wsTarget.Cells(targetRow, 2).Value = productName & " "
-            wsTarget.Cells(targetRow, 4).Value = wsSource.Cells(i, 12).Value
+            wsTarget.Cells(targetRow, 1).Value = productName   ' A: Name (was B)
+            wsTarget.Cells(targetRow, 9).Value = wsSource.Cells(i, 12).Value  ' I: Mkt Value (position value)
             targetRow = targetRow + 1
         End If
     Next i
@@ -787,76 +811,76 @@ Sub AddBottomTotals(ws As Worksheet, startRow As Long)
     Dim r As Long
     r = startRow + 1
 
-    ' Section header
-    ws.Cells(r, 2).Value = "FUND PERFORMANCE SUMMARY"
-    ws.Cells(r, 2).Font.Bold = True
-    ws.Cells(r, 2).Font.Size = 12
+    ' Section header (now column A instead of B)
+    ws.Cells(r, 1).Value = "FUND PERFORMANCE SUMMARY"
+    ws.Cells(r, 1).Font.Bold = True
+    ws.Cells(r, 1).Font.Size = 12
     r = r + 2
 
     ' Total Portfolio Value
-    ws.Cells(r, 2).Value = "Total Portfolio Value:"
-    ws.Cells(r, 2).Font.Bold = True
+    ws.Cells(r, 1).Value = "Total Portfolio Value:"
+    ws.Cells(r, 1).Font.Bold = True
     If totalEquity > 0 Then
-        ws.Cells(r, 4).Value = totalEquity
-        ws.Cells(r, 4).NumberFormat = "$#,##0"
+        ws.Cells(r, 3).Value = totalEquity
+        ws.Cells(r, 3).NumberFormat = "#,##0"  ' No $ symbol
     Else
-        ws.Cells(r, 4).Value = "(Not available)"
+        ws.Cells(r, 3).Value = "(Not available)"
     End If
     r = r + 1
 
     ' NAV Per Share
-    ws.Cells(r, 2).Value = "NAV Per Share:"
-    ws.Cells(r, 2).Font.Bold = True
+    ws.Cells(r, 1).Value = "NAV Per Share:"
+    ws.Cells(r, 1).Font.Bold = True
     If navPerShare > 0 Then
-        ws.Cells(r, 4).Value = navPerShare
-        ws.Cells(r, 4).NumberFormat = "$#,##0.00"
+        ws.Cells(r, 3).Value = navPerShare
+        ws.Cells(r, 3).NumberFormat = "#,##0.00"  ' No $ symbol
     Else
-        ws.Cells(r, 4).Value = "(Not available)"
+        ws.Cells(r, 3).Value = "(Not available)"
     End If
     r = r + 1
 
     ' Inception Date
-    ws.Cells(r, 2).Value = "Fund Inception Date:"
-    ws.Cells(r, 2).Font.Bold = True
-    ws.Cells(r, 4).Value = "March 2025"
+    ws.Cells(r, 1).Value = "Fund Inception Date:"
+    ws.Cells(r, 1).Font.Bold = True
+    ws.Cells(r, 3).Value = "March 2025"
     r = r + 1
 
     ' YTD Fund Return (from K94 - PRIMARY SOURCE)
-    ws.Cells(r, 2).Value = "YTD Fund Return:"
-    ws.Cells(r, 2).Font.Bold = True
+    ws.Cells(r, 1).Value = "YTD Fund Return:"
+    ws.Cells(r, 1).Font.Bold = True
     If ytdFundReturnFound Then
-        ws.Cells(r, 4).Value = ytdFundReturn
-        ws.Cells(r, 4).NumberFormat = "0.00%"
-        ws.Cells(r, 5).Value = "(from Gain & Exposure report)"
-        ws.Cells(r, 5).Font.Italic = True
-        ws.Cells(r, 5).Font.Color = RGB(128, 128, 128)
+        ws.Cells(r, 3).Value = ytdFundReturn
+        ws.Cells(r, 3).NumberFormat = "0.00%"
+        ws.Cells(r, 4).Value = "(from Gain & Exposure report)"
+        ws.Cells(r, 4).Font.Italic = True
+        ws.Cells(r, 4).Font.Color = RGB(128, 128, 128)
     ElseIf performanceDataFound And ytdReturn <> 0 Then
-        ws.Cells(r, 4).Value = ytdReturn
-        ws.Cells(r, 4).NumberFormat = "0.00%"
-        ws.Cells(r, 5).Value = "(from DailyRor)"
-        ws.Cells(r, 5).Font.Italic = True
-        ws.Cells(r, 5).Font.Color = RGB(128, 128, 128)
+        ws.Cells(r, 3).Value = ytdReturn
+        ws.Cells(r, 3).NumberFormat = "0.00%"
+        ws.Cells(r, 4).Value = "(from DailyRor)"
+        ws.Cells(r, 4).Font.Italic = True
+        ws.Cells(r, 4).Font.Color = RGB(128, 128, 128)
     Else
-        ws.Cells(r, 4).Value = "(Not available)"
+        ws.Cells(r, 3).Value = "(Not available)"
     End If
     r = r + 1
 
     ' MTD Net Return
-    ws.Cells(r, 2).Value = "MTD Net Return:"
-    ws.Cells(r, 2).Font.Bold = True
+    ws.Cells(r, 1).Value = "MTD Net Return:"
+    ws.Cells(r, 1).Font.Bold = True
     If performanceDataFound And mtdReturn <> 0 Then
-        ws.Cells(r, 4).Value = mtdReturn
-        ws.Cells(r, 4).NumberFormat = "0.00%"
+        ws.Cells(r, 3).Value = mtdReturn
+        ws.Cells(r, 3).NumberFormat = "0.00%"
     Else
-        ws.Cells(r, 4).Value = "(Not available)"
+        ws.Cells(r, 3).Value = "(Not available)"
     End If
     r = r + 1
 
     ' Data Source Note
     r = r + 1
-    ws.Cells(r, 2).Value = "Report generated: " & Format(Now, "MMMM D, YYYY h:mm AM/PM")
-    ws.Cells(r, 2).Font.Italic = True
-    ws.Cells(r, 2).Font.Color = RGB(128, 128, 128)
+    ws.Cells(r, 1).Value = "Report generated: " & Format(Now, "MMMM D, YYYY h:mm AM/PM")
+    ws.Cells(r, 1).Font.Italic = True
+    ws.Cells(r, 1).Font.Color = RGB(128, 128, 128)
 End Sub
 
 ' ====================================================================
@@ -867,17 +891,19 @@ Sub FormatStocksSheet(ws As Worksheet, lastRow As Long)
     Dim i As Long
 
     If lastRow > 4 Then
-        ' Number formats
-        ws.Range("D4:D" & lastRow).NumberFormat = "#,##0"
-        ws.Range("E4:H" & lastRow).NumberFormat = "$#,##0.00"
-        ws.Range("I4:I" & lastRow).NumberFormat = "0.00%"
-        ws.Range("J4:J" & lastRow).NumberFormat = "0.00%"
-        ws.Range("K4:K" & lastRow).NumberFormat = "#,##0"
-        ws.Range("L4:M" & lastRow).NumberFormat = "0.00%"
+        ' Number formats - NO currency symbols, rounded to nearest dollar
+        ' A=Name, B=Ticker, C=Portfolio Wgt, D=% Diff, E=Daily Chg, F=Unit Cost, G=Current Px, H=Total Cost, I=Mkt Value, J=P&L, K=Attribution
+        ws.Range("C4:C" & lastRow).NumberFormat = "0.00%"      ' Portfolio Wgt
+        ws.Range("D4:D" & lastRow).NumberFormat = "0.00%"      ' % Diff
+        ws.Range("E4:E" & lastRow).NumberFormat = "0.00%"      ' Daily Chg
+        ws.Range("F4:G" & lastRow).NumberFormat = "#,##0"      ' Unit Cost, Current Px (rounded, no $)
+        ws.Range("H4:I" & lastRow).NumberFormat = "#,##0"      ' Total Cost, Mkt Value (rounded, no $)
+        ws.Range("J4:J" & lastRow).NumberFormat = "#,##0"      ' P&L (no $)
+        ws.Range("K4:K" & lastRow).NumberFormat = "0.00%"      ' Attribution
 
         ' Apply alternating row colors (zebra striping) and font color
         For i = 4 To lastRow
-            With ws.Range("B" & i & ":M" & i)
+            With ws.Range("A" & i & ":K" & i)
                 .Font.Color = COLOR_DARK_GRAY
                 If (i Mod 2) = 0 Then
                     .Interior.Color = COLOR_WHITE
@@ -888,11 +914,13 @@ Sub FormatStocksSheet(ws As Worksheet, lastRow As Long)
         Next i
     End If
 
-    ws.Columns("B:M").AutoFit
+    ' Set column widths - narrower Name column
+    ws.Columns("A").ColumnWidth = 30  ' Name - narrower
+    ws.Columns("B:K").AutoFit
 
     ' Add borders
     If lastRow > 4 Then
-        With ws.Range("B2:M" & lastRow).Borders
+        With ws.Range("A2:K" & lastRow).Borders
             .LineStyle = xlContinuous
             .Weight = xlThin
             .Color = RGB(200, 200, 200)
@@ -907,24 +935,23 @@ Sub FormatOptionsSheet(ws As Worksheet, lastPutRow As Long, lastCallRow As Long)
 
     lastRow = Application.Max(lastPutRow, lastCallRow)
 
-    ' Number formats
-    ws.Range("C:C").NumberFormat = "#,##0"
-    ws.Range("D:D").NumberFormat = "#,##0"
-    ws.Range("E:E").NumberFormat = "0.00%"
-    ws.Range("F:F").NumberFormat = "$#,##0.00"
-    ws.Range("G:G").NumberFormat = "$#,##0.00"
-    ws.Range("H:H").NumberFormat = "0.00%"
-    ws.Range("J:J").NumberFormat = "$#,##0.00"
-    ws.Range("K:K").NumberFormat = "0.00%"
-    ws.Range("L:N").NumberFormat = "$#,##0"
-    ws.Range("O:O").NumberFormat = "#,##0"
+    ' Number formats - NO currency symbols, new column structure (A-M)
+    ' A=Name, B=Quantity, C=Underlying Qty, D=% Hedged, E=Strike Px, F=Underlying Px, G=% Moneyness, H=Expiry, I=Unit Cost, J=Total Cost, K=Current Px, L=Mkt Value, M=P&L
+    ws.Range("B:B").NumberFormat = "#,##0"         ' Quantity
+    ws.Range("C:C").NumberFormat = "#,##0"         ' Underlying Qty
+    ws.Range("D:D").NumberFormat = "0.00%"         ' % Hedged
+    ws.Range("E:E").NumberFormat = "#,##0"         ' Strike Px (no $)
+    ws.Range("F:F").NumberFormat = "#,##0"         ' Underlying Px (no $)
+    ws.Range("G:G").NumberFormat = "0.00%"         ' % Moneyness
+    ws.Range("I:L").NumberFormat = "#,##0"         ' Unit Cost, Total Cost, Current Px, Mkt Value (no $)
+    ws.Range("M:M").NumberFormat = "#,##0"         ' P&L (no $)
 
     ' Find CALLS header row (it's 2 rows after the last PUT)
     callHeaderRow = lastPutRow + 2
 
     ' Apply alternating row colors for PUTS section (starting row 5)
     For i = 5 To lastPutRow
-        With ws.Range("B" & i & ":O" & i)
+        With ws.Range("A" & i & ":M" & i)
             .Font.Color = COLOR_DARK_GRAY
             If (i Mod 2) = 1 Then
                 .Interior.Color = COLOR_WHITE
@@ -937,10 +964,10 @@ Sub FormatOptionsSheet(ws As Worksheet, lastPutRow As Long, lastCallRow As Long)
     ' Format CALLS header row with navy blue
     If callHeaderRow > 5 Then
         ' CALLS title
-        ws.Cells(callHeaderRow - 1, 2).Font.Color = COLOR_HEADER_GRAY
+        ws.Cells(callHeaderRow - 1, 1).Font.Color = COLOR_HEADER_GRAY
 
         ' CALLS sub-header row - navy blue background
-        With ws.Range("B" & callHeaderRow & ":O" & callHeaderRow)
+        With ws.Range("A" & callHeaderRow & ":M" & callHeaderRow)
             .Font.Bold = True
             .Font.Color = COLOR_WHITE
             .Interior.Color = COLOR_NAVY_BLUE
@@ -948,7 +975,7 @@ Sub FormatOptionsSheet(ws As Worksheet, lastPutRow As Long, lastCallRow As Long)
         End With
 
         ' Format column group headers for CALLS section
-        With ws.Range("J" & (callHeaderRow - 1) & ":O" & (callHeaderRow - 1))
+        With ws.Range("I" & (callHeaderRow - 1) & ":M" & (callHeaderRow - 1))
             .Font.Bold = True
             .Font.Color = COLOR_WHITE
             .Interior.Color = COLOR_NAVY_BLUE
@@ -957,7 +984,7 @@ Sub FormatOptionsSheet(ws As Worksheet, lastPutRow As Long, lastCallRow As Long)
 
         ' Apply alternating row colors for CALLS section
         For i = callHeaderRow + 1 To lastCallRow
-            With ws.Range("B" & i & ":O" & i)
+            With ws.Range("A" & i & ":M" & i)
                 .Font.Color = COLOR_DARK_GRAY
                 If (i Mod 2) = 0 Then
                     .Interior.Color = COLOR_WHITE
@@ -968,11 +995,13 @@ Sub FormatOptionsSheet(ws As Worksheet, lastPutRow As Long, lastCallRow As Long)
         Next i
     End If
 
-    ws.Columns("B:O").AutoFit
+    ' Set column widths - narrower Name column
+    ws.Columns("A").ColumnWidth = 30  ' Name - narrower
+    ws.Columns("B:M").AutoFit
 
     ' Add borders
     If lastRow > 4 Then
-        With ws.Range("B2:O" & lastRow).Borders
+        With ws.Range("A2:M" & lastRow).Borders
             .LineStyle = xlContinuous
             .Weight = xlThin
             .Color = RGB(200, 200, 200)
