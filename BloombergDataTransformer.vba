@@ -1,13 +1,18 @@
 ' ====================================================================
-' Bloomberg Portfolio Data Transformer - Version 5.2
+' Portfolio Data Transformer - Version 5.3
 ' ====================================================================
-' WHAT'S NEW IN V5.2:
+' WHAT'S NEW IN V5.3:
+'   - REMOVED Bloomberg dependency - all data now comes from NAV reports
+'   - Stock prices use "Today USD" from source file (no BDP formulas)
+'   - Option underlying prices looked up from stock prices dictionary
+'   - No Bloomberg Terminal required to run or view reports
+'
+' PREVIOUS (V5.2):
 '   - Removed blank column A (data starts in column A now)
 '   - Reordered columns: Name, Ticker, Portfolio Wgt, % Diff, Daily Chg, Unit Cost, Current Px, etc.
 '   - Removed currency symbols from cells (numbers only, headers show USD)
 '   - Narrower Name column (30 width)
 '   - Rounded prices to nearest dollar
-'   - Fixed Japan FX conversion (was showing wrong % returns)
 '   - Options: Removed Yield % column, added ($) to P&L header
 '
 ' PREVIOUS (V5.1):
@@ -72,6 +77,7 @@ Private Const COLOR_HEADER_GRAY As Long = 5855577  ' RGB(89, 89, 89)
 ' GLOBAL VARIABLES
 ' ============================================
 Dim stockPositions As Object      ' Dictionary: ticker -> shares
+Dim stockPrices As Object         ' Dictionary: ticker -> current price (for options underlying)
 Dim ytdReturn As Double           ' YTD return from DailyRor
 Dim mtdReturn As Double           ' MTD return from DailyRor
 Dim totalEquity As Double         ' Total portfolio value
@@ -111,6 +117,7 @@ Sub TransformBloombergData()
     Application.ScreenUpdating = False
     Application.Calculation = xlCalculationManual
     Set stockPositions = CreateObject("Scripting.Dictionary")
+    Set stockPrices = CreateObject("Scripting.Dictionary")
     performanceDataFound = False
     ytdFundReturnFound = False
     ytdReturn = 0
@@ -135,20 +142,23 @@ Sub TransformBloombergData()
     ' Find last row with data
     lastRow = wsSource.Cells(wsSource.Rows.Count, "A").End(xlUp).Row
 
-    ' First pass: Build stock positions dictionary
+    ' First pass: Build stock positions and prices dictionaries
     For i = 6 To lastRow
         productName = Trim(CStr(wsSource.Cells(i, 1).Value))
         If productName <> "" And productName <> "USD" And Not IsOption(productName) Then
             Dim ticker As String
             Dim shares As Variant
+            Dim currentPrice As Variant
             ticker = Trim(CStr(wsSource.Cells(i, 2).Value))
             shares = wsSource.Cells(i, 12).Value
+            currentPrice = wsSource.Cells(i, 6).Value  ' Today USD price
 
             Dim baseTicker As String
             baseTicker = ExtractBaseTicker(ticker)
 
-            If baseTicker <> "" And IsNumeric(shares) Then
-                stockPositions(baseTicker) = shares
+            If baseTicker <> "" Then
+                If IsNumeric(shares) Then stockPositions(baseTicker) = shares
+                If IsNumeric(currentPrice) Then stockPrices(baseTicker) = currentPrice
             End If
         End If
     Next i
@@ -269,7 +279,7 @@ Sub TransformBloombergData()
         msg = msg & "  Total Equity: " & Format(totalEquity, "$#,##0")
     End If
 
-    MsgBox msg, vbInformation, "Bloomberg Data Transformer v5.2"
+    MsgBox msg, vbInformation, "Portfolio Data Transformer v5.3"
 
     Exit Sub
 
@@ -535,6 +545,17 @@ Function GetUnderlyingShares(optionTicker As String) As Variant
     End If
 End Function
 
+Function GetUnderlyingPrice(optionTicker As String) As Variant
+    Dim baseTicker As String
+    baseTicker = ExtractTickerFromOptionName(optionTicker)
+
+    If stockPrices.Exists(baseTicker) Then
+        GetUnderlyingPrice = stockPrices(baseTicker)
+    Else
+        GetUnderlyingPrice = ""
+    End If
+End Function
+
 ' ====================================================================
 ' SETUP HEADERS
 ' ====================================================================
@@ -633,45 +654,25 @@ End Sub
 ' ====================================================================
 
 Sub ProcessStock(wsSource As Worksheet, sourceRow As Long, wsTarget As Worksheet, targetRow As Long)
-    ' NEW COLUMN ORDER (starting at A):
+    ' COLUMN ORDER (starting at A):
     ' A=Name, B=Ticker, C=Portfolio Wgt, D=% Diff, E=Daily Chg, F=Unit Cost, G=Current Px, H=Total Cost, I=Mkt Value, J=P&L, K=Attribution
+    '
+    ' SOURCE COLUMNS (from NAV report):
+    ' 1=Name, 2=Ticker, 4=Portfolio Wgt, 5=Unit Cost, 6=Today USD, 7=Daily Chg, 8=Attribution, 9=Total Cost, 10=Mkt Value, 11=P&L
 
-    Dim ticker As String
-    Dim fxCurrency As String
-    Dim quantity As Double
-
-    ticker = Trim(CStr(wsSource.Cells(sourceRow, 2).Value))
-    quantity = wsSource.Cells(sourceRow, 12).Value
-
-    wsTarget.Cells(targetRow, 1).Value = wsSource.Cells(sourceRow, 1).Value  ' A: Name
-    wsTarget.Cells(targetRow, 2).Value = wsSource.Cells(sourceRow, 2).Value  ' B: Ticker
-    wsTarget.Cells(targetRow, 3).Value = wsSource.Cells(sourceRow, 4).Value  ' C: Portfolio Wgt
-    ' D: % Diff (Cost) - formula set below after Current Px
-    wsTarget.Cells(targetRow, 5).Value = wsSource.Cells(sourceRow, 7).Value  ' E: Daily Chg %
-    wsTarget.Cells(targetRow, 6).Value = wsSource.Cells(sourceRow, 5).Value  ' F: Unit Cost
-
-    ' G: Current Px - Bloomberg formula with FX conversion if needed
-    ' NOTE: Unit Cost from source file is in USD. We convert foreign prices to USD for comparison.
-    If ticker <> "" And InStr(ticker, " ") > 0 Then
-        fxCurrency = GetFXCurrency(ticker)
-
-        If fxCurrency <> "" Then
-            ' Foreign ticker: multiply local price by FX rate to convert to USD
-            ' Example: "JPY Curncy" returns USD per 1 JPY (~0.0067)
-            wsTarget.Cells(targetRow, 7).Formula = "=BDP(""" & ticker & " Equity"",""PX_LAST"")*BDP(""" & fxCurrency & " Curncy"",""PX_LAST"")"
-        Else
-            ' USD ticker: use price directly
-            wsTarget.Cells(targetRow, 7).Formula = "=BDP(""" & ticker & " Equity"",""PX_LAST"")"
-        End If
-    Else
-        wsTarget.Cells(targetRow, 7).Value = wsSource.Cells(sourceRow, 6).Value
-    End If
-
-    wsTarget.Cells(targetRow, 8).Value = wsSource.Cells(sourceRow, 9).Value  ' H: Total Cost
-    wsTarget.Cells(targetRow, 9).Formula = "=G" & targetRow & "*" & quantity  ' I: Mkt Value = Current Px * Quantity
-    wsTarget.Cells(targetRow, 4).Formula = "=(G" & targetRow & "-F" & targetRow & ")/F" & targetRow  ' D: % Diff (Cost)
+    wsTarget.Cells(targetRow, 1).Value = wsSource.Cells(sourceRow, 1).Value   ' A: Name
+    wsTarget.Cells(targetRow, 2).Value = wsSource.Cells(sourceRow, 2).Value   ' B: Ticker
+    wsTarget.Cells(targetRow, 3).Value = wsSource.Cells(sourceRow, 4).Value   ' C: Portfolio Wgt
+    wsTarget.Cells(targetRow, 5).Value = wsSource.Cells(sourceRow, 7).Value   ' E: Daily Chg %
+    wsTarget.Cells(targetRow, 6).Value = wsSource.Cells(sourceRow, 5).Value   ' F: Unit Cost
+    wsTarget.Cells(targetRow, 7).Value = wsSource.Cells(sourceRow, 6).Value   ' G: Current Px (from NAV report)
+    wsTarget.Cells(targetRow, 8).Value = wsSource.Cells(sourceRow, 9).Value   ' H: Total Cost
+    wsTarget.Cells(targetRow, 9).Value = wsSource.Cells(sourceRow, 10).Value  ' I: Mkt Value (from NAV report)
     wsTarget.Cells(targetRow, 10).Value = wsSource.Cells(sourceRow, 11).Value ' J: P&L
     wsTarget.Cells(targetRow, 11).Value = wsSource.Cells(sourceRow, 8).Value  ' K: Attribution
+
+    ' D: % Diff (Cost) - calculated from Current Px vs Unit Cost
+    wsTarget.Cells(targetRow, 4).Formula = "=(G" & targetRow & "-F" & targetRow & ")/F" & targetRow
 End Sub
 
 ' ====================================================================
@@ -730,25 +731,25 @@ Function GetFXCurrency(ticker As String) As String
 End Function
 
 Sub ProcessOption(wsSource As Worksheet, sourceRow As Long, wsTarget As Worksheet, targetRow As Long, optionType As String)
-    ' NEW COLUMN ORDER (starting at A, NO Yield column):
+    ' COLUMN ORDER (starting at A, NO Yield column):
     ' A=Name, B=Quantity, C=Underlying Qty, D=% Hedged, E=Strike Px, F=Underlying Px, G=% Moneyness, H=Expiry, I=Unit Cost, J=Total Cost, K=Current Px, L=Mkt Value, M=P&L
 
     Dim productName As String
-    Dim occTicker As String
     Dim quantity As Variant
     Dim underlyingQty As Variant
+    Dim underlyingPx As Variant
     Dim strike As String
     Dim expiry As String
     Dim baseTicker As String
 
     productName = wsSource.Cells(sourceRow, 1).Value
-    occTicker = Trim(CStr(wsSource.Cells(sourceRow, 2).Value))
     quantity = wsSource.Cells(sourceRow, 12).Value
     strike = ExtractStrike(productName)
     expiry = ExtractExpiry(productName)
     baseTicker = ExtractTickerFromOptionName(productName)
 
     underlyingQty = GetUnderlyingShares(baseTicker)
+    underlyingPx = GetUnderlyingPrice(productName)
 
     wsTarget.Cells(targetRow, 1).Value = productName           ' A: Name
     wsTarget.Cells(targetRow, 2).Value = quantity              ' B: Quantity
@@ -772,12 +773,20 @@ Sub ProcessOption(wsSource As Worksheet, sourceRow As Long, wsTarget As Workshee
         wsTarget.Cells(targetRow, 5).Value = strike
     End If
 
-    ' F: Underlying Px (Bloomberg formula)
-    If occTicker <> "" Then
-        wsTarget.Cells(targetRow, 6).FormulaArray = "=BDP(""" & occTicker & " Equity"",""OPT_UNDL_PX"")"
+    ' F: Underlying Px (from stock prices dictionary)
+    If IsNumeric(underlyingPx) And underlyingPx <> "" Then
+        wsTarget.Cells(targetRow, 6).Value = underlyingPx
+    Else
+        wsTarget.Cells(targetRow, 6).Value = ""
     End If
 
-    wsTarget.Cells(targetRow, 7).Formula = "=(F" & targetRow & "-E" & targetRow & ")/E" & targetRow  ' G: % Moneyness
+    ' G: % Moneyness (only if we have underlying price)
+    If IsNumeric(underlyingPx) And underlyingPx <> "" Then
+        wsTarget.Cells(targetRow, 7).Formula = "=(F" & targetRow & "-E" & targetRow & ")/E" & targetRow
+    Else
+        wsTarget.Cells(targetRow, 7).Value = ""
+    End If
+
     wsTarget.Cells(targetRow, 8).Value = expiry                ' H: Expiry
     wsTarget.Cells(targetRow, 9).Value = wsSource.Cells(sourceRow, 5).Value   ' I: Unit Cost
     wsTarget.Cells(targetRow, 10).Value = wsSource.Cells(sourceRow, 9).Value  ' J: Total Cost

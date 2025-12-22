@@ -71,7 +71,7 @@ This system monitors Outlook for incoming daily report emails, extracts attachme
 | D | % Diff (Cost) | Gain/loss vs cost basis |
 | E | Daily Chg % | Today's price change |
 | F | Unit Cost | Average cost (USD, rounded to nearest dollar) |
-| G | Current Px | Live price via Bloomberg BDP() (USD, rounded) |
+| G | Current Px | Current price from NAV report (USD, rounded) |
 | H | Total Cost | Cost basis (USD, rounded) |
 | I | Mkt Value | Current value (USD, rounded) |
 | J | P&L | Year-to-date P&L (USD) |
@@ -89,7 +89,7 @@ Separated into PUTS and CALLS sections:
 | C | Underlying Qty | Shares of underlying stock owned |
 | D | % Hedged | Coverage ratio |
 | E | Strike Px | Strike price (USD) |
-| F | Underlying Px | Live underlying price via Bloomberg (USD) |
+| F | Underlying Px | Underlying stock price from NAV report (USD) |
 | G | % Moneyness | ITM/OTM percentage |
 | H | Expiry | Expiration date |
 | I | Unit Cost | Average cost per contract (USD) |
@@ -125,7 +125,8 @@ The transformed output matches the professional styling of the input files:
 - Windows 10/11
 - Microsoft Outlook (Classic/Desktop version, NOT "New Outlook")
 - Microsoft Excel with macros enabled
-- Bloomberg Terminal (for live price formulas)
+
+**Note:** As of v5.3, Bloomberg Terminal is no longer required. All data comes from the NAV reports.
 
 **Important:** The "New Outlook" does not support VBA macros. You must use Classic Outlook.
 
@@ -218,9 +219,9 @@ Run `InitializeMonitor` macro manually (Alt + F8)
 2. Run `ShowTrackerState` to see what's being tracked
 3. Try `ProcessSelectedEmail` on the email directly
 
-### Bloomberg formulas show #N/A
-- Ensure Bloomberg Terminal is running and logged in
-- Test manually: type `=BDP("AAPL US Equity","PX_LAST")` in Excel
+### Missing underlying prices for options
+- Underlying prices are looked up from the stock positions in the same report
+- If an option's underlying stock is not in the portfolio, the underlying price will be blank
 
 ### Transformation errors
 1. Ensure both files are in `C:\Mobius Reports\Incoming\`
