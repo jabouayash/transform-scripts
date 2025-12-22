@@ -102,6 +102,66 @@ Public Sub SetDailyFilePath(filePath As String)
     dailyFilePath = filePath
 End Sub
 
+' ============================================
+' MANUAL RUN - Use this when testing without Outlook
+' ============================================
+Public Sub ManualRun()
+    ' This is the entry point for manual testing.
+    ' It finds the Custom NAV file in the Incoming folder and processes it.
+
+    Dim customFile As String
+    Dim wbSource As Workbook
+
+    ' Look for Custom NAV file in Incoming folder
+    customFile = Dir(INCOMING_FOLDER & "Gain And Exposure_Custom_*.XLSX")
+
+    If customFile = "" Then
+        MsgBox "No Custom NAV file found in:" & vbCrLf & INCOMING_FOLDER & vbCrLf & vbCrLf & _
+               "Please ensure the file is named:" & vbCrLf & _
+               "Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_MMDDYYYY.XLSX", _
+               vbExclamation, "File Not Found"
+        Exit Sub
+    End If
+
+    ' Check if file is already open
+    Dim alreadyOpen As Boolean
+    alreadyOpen = False
+
+    Dim wb As Workbook
+    For Each wb In Workbooks
+        If wb.Name = customFile Then
+            Set wbSource = wb
+            alreadyOpen = True
+            Exit For
+        End If
+    Next wb
+
+    ' If not open, open it
+    If Not alreadyOpen Then
+        On Error Resume Next
+        Set wbSource = Workbooks.Open(Filename:=INCOMING_FOLDER & customFile, ReadOnly:=True, UpdateLinks:=False)
+        On Error GoTo 0
+
+        If wbSource Is Nothing Then
+            MsgBox "Could not open the file. It may be in Protected View." & vbCrLf & vbCrLf & _
+                   "Please manually open this file first and click 'Enable Editing':" & vbCrLf & _
+                   INCOMING_FOLDER & customFile & vbCrLf & vbCrLf & _
+                   "Then run ManualRun again.", vbExclamation, "Protected View"
+            Exit Sub
+        End If
+    End If
+
+    wbSource.Sheets(1).Activate
+
+    ' Run the transformation
+    Call TransformBloombergData
+
+    ' Close the source file without saving (only if we opened it)
+    If Not alreadyOpen Then
+        wbSource.Close SaveChanges:=False
+    End If
+End Sub
+
 ' ====================================================================
 ' MAIN TRANSFORMATION PROCEDURE
 ' ====================================================================
@@ -1036,6 +1096,8 @@ End Sub
 ' ====================================================================
 
 Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As Long)
+    On Error Resume Next  ' Continue on chart errors
+
     Dim chartObj As ChartObject
     Dim dataRange As Range
     Dim i As Long
@@ -1193,9 +1255,6 @@ Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As 
             .ChartTitle.Font.Size = 12
             .ChartTitle.Font.Color = COLOR_NAVY_BLUE
             .HasLegend = False
-
-            ' Format bars
-            .SeriesCollection(1).Format.Fill.ForeColor.RGB = COLOR_NAVY_BLUE
         End With
     End If
 
