@@ -1416,7 +1416,8 @@ Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As 
     ' Format column widths
     wsDash.Columns("A").ColumnWidth = 35
     wsDash.Columns("B").ColumnWidth = 15
-    wsDash.Columns("C:G").ColumnWidth = 12
+    wsDash.Columns("C").ColumnWidth = 18  ' YTD P&L needs more space
+    wsDash.Columns("D:G").ColumnWidth = 12
 
     ' Move Dashboard to first position
     wsDash.Move Before:=wsDash.Parent.Sheets(1)
