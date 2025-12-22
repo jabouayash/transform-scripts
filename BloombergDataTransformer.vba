@@ -1,7 +1,14 @@
 ' ====================================================================
-' Portfolio Data Transformer - Version 5.3
+' Portfolio Data Transformer - Version 5.4
 ' ====================================================================
-' WHAT'S NEW IN V5.3:
+' WHAT'S NEW IN V5.4:
+'   - Added Dashboard sheet with charts (appears first in workbook)
+'   - KPI summary: Total Portfolio Value, YTD P&L, YTD Return, Holdings count
+'   - Bar chart: Top 10 holdings by market value
+'   - Pie chart: Portfolio allocation (Top 5 + Other)
+'   - Bar chart: YTD P&L by position (top gainers and losers)
+'
+' PREVIOUS (V5.3):
 '   - REMOVED Bloomberg dependency - all data now comes from NAV reports
 '   - Stock prices use "Today USD" from source file (no BDP formulas)
 '   - Option underlying prices looked up from stock prices dictionary
@@ -238,6 +245,12 @@ Sub TransformBloombergData()
     Call FormatStocksSheet(wsStocks, stockRow)
     Call FormatOptionsSheet(wsOptions, putRow, callRow)
 
+    ' Create Dashboard sheet with charts
+    Dim wsDashboard As Worksheet
+    Set wsDashboard = wbOutput.Sheets.Add(After:=wsOptions)
+    wsDashboard.Name = "Dashboard"
+    Call CreateDashboard(wsDashboard, wsStocks, stockRow)
+
     ' Determine output path
     ' Use OUTPUT_FOLDER if it exists, otherwise use source folder
     Dim savePath As String
@@ -279,7 +292,7 @@ Sub TransformBloombergData()
         msg = msg & "  Total Equity: " & Format(totalEquity, "$#,##0")
     End If
 
-    MsgBox msg, vbInformation, "Portfolio Data Transformer v5.3"
+    MsgBox msg, vbInformation, "Portfolio Data Transformer v5.4"
 
     Exit Sub
 
@@ -1016,4 +1029,336 @@ Sub FormatOptionsSheet(ws As Worksheet, lastPutRow As Long, lastCallRow As Long)
             .Color = RGB(200, 200, 200)
         End With
     End If
+End Sub
+
+' ====================================================================
+' DASHBOARD WITH CHARTS
+' ====================================================================
+
+Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As Long)
+    Dim chartObj As ChartObject
+    Dim dataRange As Range
+    Dim i As Long
+    Dim totalMktValue As Double
+    Dim totalPnL As Double
+    Dim totalCost As Double
+    Dim stockCount As Long
+
+    ' Calculate totals from Stocks sheet
+    stockCount = lastStockRow - 4
+    totalMktValue = 0
+    totalPnL = 0
+    totalCost = 0
+
+    For i = 4 To lastStockRow - 1
+        If IsNumeric(wsStocks.Cells(i, 9).Value) Then totalMktValue = totalMktValue + wsStocks.Cells(i, 9).Value
+        If IsNumeric(wsStocks.Cells(i, 10).Value) Then totalPnL = totalPnL + wsStocks.Cells(i, 10).Value
+        If IsNumeric(wsStocks.Cells(i, 8).Value) Then totalCost = totalCost + wsStocks.Cells(i, 8).Value
+    Next i
+
+    ' ====== KPI SECTION (Top of Dashboard) ======
+    wsDash.Cells(1, 1).Value = "PORTFOLIO DASHBOARD"
+    wsDash.Cells(1, 1).Font.Bold = True
+    wsDash.Cells(1, 1).Font.Size = 18
+    wsDash.Cells(1, 1).Font.Color = COLOR_NAVY_BLUE
+
+    wsDash.Cells(2, 1).Value = "Report Date: " & Format(Date, "MMMM D, YYYY")
+    wsDash.Cells(2, 1).Font.Italic = True
+    wsDash.Cells(2, 1).Font.Color = COLOR_HEADER_GRAY
+
+    ' KPI Cards Row
+    wsDash.Cells(4, 1).Value = "Total Portfolio Value"
+    wsDash.Cells(5, 1).Value = totalMktValue
+    wsDash.Cells(5, 1).NumberFormat = "$#,##0"
+    wsDash.Cells(5, 1).Font.Bold = True
+    wsDash.Cells(5, 1).Font.Size = 16
+
+    wsDash.Cells(4, 3).Value = "YTD P&L"
+    wsDash.Cells(5, 3).Value = totalPnL
+    wsDash.Cells(5, 3).NumberFormat = "$#,##0"
+    wsDash.Cells(5, 3).Font.Bold = True
+    wsDash.Cells(5, 3).Font.Size = 16
+    If totalPnL >= 0 Then
+        wsDash.Cells(5, 3).Font.Color = RGB(0, 128, 0)  ' Green
+    Else
+        wsDash.Cells(5, 3).Font.Color = RGB(192, 0, 0)  ' Red
+    End If
+
+    wsDash.Cells(4, 5).Value = "YTD Return"
+    If totalCost > 0 Then
+        wsDash.Cells(5, 5).Value = totalPnL / totalCost
+    Else
+        wsDash.Cells(5, 5).Value = 0
+    End If
+    wsDash.Cells(5, 5).NumberFormat = "0.00%"
+    wsDash.Cells(5, 5).Font.Bold = True
+    wsDash.Cells(5, 5).Font.Size = 16
+
+    wsDash.Cells(4, 7).Value = "Holdings"
+    wsDash.Cells(5, 7).Value = stockCount
+    wsDash.Cells(5, 7).Font.Bold = True
+    wsDash.Cells(5, 7).Font.Size = 16
+
+    ' Format KPI headers
+    wsDash.Range("A4,C4,E4,G4").Font.Color = COLOR_HEADER_GRAY
+    wsDash.Range("A4,C4,E4,G4").Font.Size = 10
+
+    ' ====== CHART 1: Top 10 Holdings by Market Value (Bar Chart) ======
+    ' First, create a sorted data table for the chart (hidden area)
+    Dim chartDataStart As Long
+    chartDataStart = 8
+
+    wsDash.Cells(chartDataStart, 1).Value = "TOP 10 HOLDINGS BY VALUE"
+    wsDash.Cells(chartDataStart, 1).Font.Bold = True
+    wsDash.Cells(chartDataStart, 1).Font.Size = 12
+    wsDash.Cells(chartDataStart, 1).Font.Color = COLOR_NAVY_BLUE
+
+    ' Copy and sort top 10 holdings data
+    Dim holdings() As Variant
+    Dim holdingCount As Long
+    holdingCount = 0
+
+    ' Count actual holdings (not cash)
+    For i = 4 To lastStockRow - 1
+        If wsStocks.Cells(i, 1).Value <> "" And _
+           wsStocks.Cells(i, 1).Value <> "USD" And _
+           wsStocks.Cells(i, 1).Value <> "JPY" And _
+           wsStocks.Cells(i, 1).Value <> "CAD" And _
+           wsStocks.Cells(i, 1).Value <> "EUR" And _
+           wsStocks.Cells(i, 1).Value <> "GBP" Then
+            holdingCount = holdingCount + 1
+        End If
+    Next i
+
+    If holdingCount > 0 Then
+        ReDim holdings(1 To holdingCount, 1 To 2)
+        Dim idx As Long
+        idx = 1
+
+        For i = 4 To lastStockRow - 1
+            If wsStocks.Cells(i, 1).Value <> "" And _
+               wsStocks.Cells(i, 1).Value <> "USD" And _
+               wsStocks.Cells(i, 1).Value <> "JPY" And _
+               wsStocks.Cells(i, 1).Value <> "CAD" And _
+               wsStocks.Cells(i, 1).Value <> "EUR" And _
+               wsStocks.Cells(i, 1).Value <> "GBP" Then
+                holdings(idx, 1) = wsStocks.Cells(i, 1).Value  ' Name
+                If IsNumeric(wsStocks.Cells(i, 9).Value) Then
+                    holdings(idx, 2) = wsStocks.Cells(i, 9).Value  ' Mkt Value
+                Else
+                    holdings(idx, 2) = 0
+                End If
+                idx = idx + 1
+            End If
+        Next i
+
+        ' Simple bubble sort by market value (descending)
+        Dim j As Long
+        Dim tempName As Variant
+        Dim tempValue As Variant
+        For i = 1 To holdingCount - 1
+            For j = i + 1 To holdingCount
+                If holdings(j, 2) > holdings(i, 2) Then
+                    tempName = holdings(i, 1)
+                    tempValue = holdings(i, 2)
+                    holdings(i, 1) = holdings(j, 1)
+                    holdings(i, 2) = holdings(j, 2)
+                    holdings(j, 1) = tempName
+                    holdings(j, 2) = tempValue
+                End If
+            Next j
+        Next i
+
+        ' Write top 10 to dashboard
+        Dim topCount As Long
+        topCount = Application.Min(10, holdingCount)
+
+        wsDash.Cells(chartDataStart + 1, 1).Value = "Name"
+        wsDash.Cells(chartDataStart + 1, 2).Value = "Market Value"
+        wsDash.Range("A" & (chartDataStart + 1) & ":B" & (chartDataStart + 1)).Font.Bold = True
+
+        For i = 1 To topCount
+            wsDash.Cells(chartDataStart + 1 + i, 1).Value = holdings(i, 1)
+            wsDash.Cells(chartDataStart + 1 + i, 2).Value = holdings(i, 2)
+            wsDash.Cells(chartDataStart + 1 + i, 2).NumberFormat = "$#,##0"
+        Next i
+
+        ' Create bar chart for top holdings
+        Set chartObj = wsDash.ChartObjects.Add(Left:=250, Top:=120, Width:=400, Height:=250)
+        With chartObj.Chart
+            .ChartType = xlBarClustered
+            .SetSourceData Source:=wsDash.Range("A" & (chartDataStart + 2) & ":B" & (chartDataStart + 1 + topCount))
+            .HasTitle = True
+            .ChartTitle.Text = "Top Holdings by Market Value"
+            .ChartTitle.Font.Size = 12
+            .ChartTitle.Font.Color = COLOR_NAVY_BLUE
+            .HasLegend = False
+
+            ' Format bars
+            .SeriesCollection(1).Format.Fill.ForeColor.RGB = COLOR_NAVY_BLUE
+        End With
+    End If
+
+    ' ====== CHART 2: Portfolio Allocation Pie Chart ======
+    Dim pieDataStart As Long
+    pieDataStart = chartDataStart + 15
+
+    wsDash.Cells(pieDataStart, 1).Value = "PORTFOLIO ALLOCATION"
+    wsDash.Cells(pieDataStart, 1).Font.Bold = True
+    wsDash.Cells(pieDataStart, 1).Font.Size = 12
+    wsDash.Cells(pieDataStart, 1).Font.Color = COLOR_NAVY_BLUE
+
+    If holdingCount > 0 Then
+        ' Use top 5 + "Other" for pie chart
+        Dim pieCount As Long
+        pieCount = Application.Min(5, holdingCount)
+        Dim otherValue As Double
+        otherValue = 0
+
+        wsDash.Cells(pieDataStart + 1, 1).Value = "Category"
+        wsDash.Cells(pieDataStart + 1, 2).Value = "Value"
+        wsDash.Range("A" & (pieDataStart + 1) & ":B" & (pieDataStart + 1)).Font.Bold = True
+
+        For i = 1 To pieCount
+            wsDash.Cells(pieDataStart + 1 + i, 1).Value = holdings(i, 1)
+            wsDash.Cells(pieDataStart + 1 + i, 2).Value = holdings(i, 2)
+        Next i
+
+        ' Calculate "Other"
+        If holdingCount > 5 Then
+            For i = 6 To holdingCount
+                otherValue = otherValue + holdings(i, 2)
+            Next i
+            wsDash.Cells(pieDataStart + 7, 1).Value = "Other"
+            wsDash.Cells(pieDataStart + 7, 2).Value = otherValue
+            pieCount = 6
+        End If
+
+        ' Create pie chart
+        Set chartObj = wsDash.ChartObjects.Add(Left:=250, Top:=400, Width:=350, Height:=250)
+        With chartObj.Chart
+            .ChartType = xlPie
+            .SetSourceData Source:=wsDash.Range("A" & (pieDataStart + 2) & ":B" & (pieDataStart + 1 + pieCount))
+            .HasTitle = True
+            .ChartTitle.Text = "Portfolio Allocation (Top 5 + Other)"
+            .ChartTitle.Font.Size = 12
+            .ChartTitle.Font.Color = COLOR_NAVY_BLUE
+            .HasLegend = True
+            .Legend.Position = xlLegendPositionRight
+
+            ' Add data labels
+            .SeriesCollection(1).HasDataLabels = True
+            .SeriesCollection(1).DataLabels.ShowPercentage = True
+            .SeriesCollection(1).DataLabels.ShowValue = False
+        End With
+    End If
+
+    ' ====== CHART 3: YTD P&L by Position (Top Gainers/Losers) ======
+    Dim pnlDataStart As Long
+    pnlDataStart = pieDataStart + 12
+
+    wsDash.Cells(pnlDataStart, 1).Value = "YTD P&L BY POSITION"
+    wsDash.Cells(pnlDataStart, 1).Font.Bold = True
+    wsDash.Cells(pnlDataStart, 1).Font.Size = 12
+    wsDash.Cells(pnlDataStart, 1).Font.Color = COLOR_NAVY_BLUE
+
+    If holdingCount > 0 Then
+        ' Create array for P&L sorting
+        Dim pnlData() As Variant
+        ReDim pnlData(1 To holdingCount, 1 To 2)
+        idx = 1
+
+        For i = 4 To lastStockRow - 1
+            If wsStocks.Cells(i, 1).Value <> "" And _
+               wsStocks.Cells(i, 1).Value <> "USD" And _
+               wsStocks.Cells(i, 1).Value <> "JPY" And _
+               wsStocks.Cells(i, 1).Value <> "CAD" And _
+               wsStocks.Cells(i, 1).Value <> "EUR" And _
+               wsStocks.Cells(i, 1).Value <> "GBP" Then
+                pnlData(idx, 1) = wsStocks.Cells(i, 1).Value  ' Name
+                If IsNumeric(wsStocks.Cells(i, 10).Value) Then
+                    pnlData(idx, 2) = wsStocks.Cells(i, 10).Value  ' P&L
+                Else
+                    pnlData(idx, 2) = 0
+                End If
+                idx = idx + 1
+            End If
+        Next i
+
+        ' Sort by P&L (descending)
+        For i = 1 To holdingCount - 1
+            For j = i + 1 To holdingCount
+                If pnlData(j, 2) > pnlData(i, 2) Then
+                    tempName = pnlData(i, 1)
+                    tempValue = pnlData(i, 2)
+                    pnlData(i, 1) = pnlData(j, 1)
+                    pnlData(i, 2) = pnlData(j, 2)
+                    pnlData(j, 1) = tempName
+                    pnlData(j, 2) = tempValue
+                End If
+            Next j
+        Next i
+
+        ' Write top 5 gainers and top 5 losers
+        wsDash.Cells(pnlDataStart + 1, 1).Value = "Position"
+        wsDash.Cells(pnlDataStart + 1, 2).Value = "YTD P&L"
+        wsDash.Range("A" & (pnlDataStart + 1) & ":B" & (pnlDataStart + 1)).Font.Bold = True
+
+        Dim pnlDisplayCount As Long
+        pnlDisplayCount = Application.Min(10, holdingCount)
+
+        ' Show top gainers (first 5) and losers (last 5)
+        Dim displayIdx As Long
+        displayIdx = 1
+
+        ' Top 5 gainers
+        For i = 1 To Application.Min(5, holdingCount)
+            wsDash.Cells(pnlDataStart + 1 + displayIdx, 1).Value = pnlData(i, 1)
+            wsDash.Cells(pnlDataStart + 1 + displayIdx, 2).Value = pnlData(i, 2)
+            wsDash.Cells(pnlDataStart + 1 + displayIdx, 2).NumberFormat = "$#,##0"
+            If pnlData(i, 2) >= 0 Then
+                wsDash.Cells(pnlDataStart + 1 + displayIdx, 2).Font.Color = RGB(0, 128, 0)
+            Else
+                wsDash.Cells(pnlDataStart + 1 + displayIdx, 2).Font.Color = RGB(192, 0, 0)
+            End If
+            displayIdx = displayIdx + 1
+        Next i
+
+        ' Bottom 5 losers (if more than 5 holdings)
+        If holdingCount > 5 Then
+            For i = holdingCount - 4 To holdingCount
+                If i > 5 Then  ' Don't duplicate
+                    wsDash.Cells(pnlDataStart + 1 + displayIdx, 1).Value = pnlData(i, 1)
+                    wsDash.Cells(pnlDataStart + 1 + displayIdx, 2).Value = pnlData(i, 2)
+                    wsDash.Cells(pnlDataStart + 1 + displayIdx, 2).NumberFormat = "$#,##0"
+                    If pnlData(i, 2) >= 0 Then
+                        wsDash.Cells(pnlDataStart + 1 + displayIdx, 2).Font.Color = RGB(0, 128, 0)
+                    Else
+                        wsDash.Cells(pnlDataStart + 1 + displayIdx, 2).Font.Color = RGB(192, 0, 0)
+                    End If
+                    displayIdx = displayIdx + 1
+                End If
+            Next i
+        End If
+
+        ' Create bar chart for P&L
+        Set chartObj = wsDash.ChartObjects.Add(Left:=250, Top:=680, Width:=400, Height:=250)
+        With chartObj.Chart
+            .ChartType = xlBarClustered
+            .SetSourceData Source:=wsDash.Range("A" & (pnlDataStart + 2) & ":B" & (pnlDataStart + displayIdx))
+            .HasTitle = True
+            .ChartTitle.Text = "YTD P&L: Top Gainers & Losers"
+            .ChartTitle.Font.Size = 12
+            .ChartTitle.Font.Color = COLOR_NAVY_BLUE
+            .HasLegend = False
+        End With
+    End If
+
+    ' Format column widths
+    wsDash.Columns("A").ColumnWidth = 35
+    wsDash.Columns("B").ColumnWidth = 15
+    wsDash.Columns("C:G").ColumnWidth = 12
+
+    ' Move Dashboard to first position
+    wsDash.Move Before:=wsDash.Parent.Sheets(1)
 End Sub

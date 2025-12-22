@@ -9,6 +9,16 @@ Format: [Semantic Versioning](https://semver.org/) - MAJOR.MINOR.PATCH
 
 ---
 
+## [5.4.0] - 2025-12-22
+### Added
+- Dashboard sheet with charts (appears first in workbook)
+- KPI summary section: Total Portfolio Value, YTD P&L, YTD Return %, Holdings count
+- Bar chart: Top 10 holdings by market value
+- Pie chart: Portfolio allocation (Top 5 + Other)
+- Bar chart: YTD P&L by position (top gainers and losers)
+
+---
+
 ## [5.3.0] - 2025-12-22
 ### Removed
 - Bloomberg Terminal dependency - all data now comes from NAV reports
