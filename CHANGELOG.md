@@ -9,6 +9,17 @@ Format: [Semantic Versioning](https://semver.org/) - MAJOR.MINOR.PATCH
 
 ---
 
+## [5.5.0] - 2025-12-22
+### Fixed
+- Dashboard YTD P&L now includes Options P&L (was showing only Stocks)
+- Portfolio Allocation "Other" calculation now sums correctly to Total Portfolio Value
+- Options expiry dates now display as MM/DD/YYYY (was showing serial numbers)
+- #DIV/0! errors prevented with IFERROR wrapper on % Diff formula
+- Holdings count now excludes cash positions (USD, JPY, CAD, EUR, GBP)
+- GOOG options now correctly look up GOOGL stock price (ticker alias)
+
+---
+
 ## [5.4.0] - 2025-12-22
 ### Added
 - Dashboard sheet with charts (appears first in workbook)

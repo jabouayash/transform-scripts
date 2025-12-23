@@ -352,7 +352,7 @@ Sub TransformBloombergData()
         msg = msg & "  Total Equity: " & Format(totalEquity, "$#,##0")
     End If
 
-    MsgBox msg, vbInformation, "Portfolio Data Transformer v5.4"
+    MsgBox msg, vbInformation, "Portfolio Data Transformer v5.5"
 
     Exit Sub
 
@@ -622,6 +622,15 @@ Function GetUnderlyingPrice(optionTicker As String) As Variant
     Dim baseTicker As String
     baseTicker = ExtractTickerFromOptionName(optionTicker)
 
+    ' Fix 5: Handle common ticker aliases (GOOG options → GOOGL stock)
+    If Not stockPrices.Exists(baseTicker) Then
+        Select Case UCase(baseTicker)
+            Case "GOOG": baseTicker = "GOOGL"
+            Case "BRK.A": baseTicker = "BRK/A"
+            Case "BRK.B": baseTicker = "BRK/B"
+        End Select
+    End If
+
     If stockPrices.Exists(baseTicker) Then
         GetUnderlyingPrice = stockPrices(baseTicker)
     Else
@@ -744,8 +753,8 @@ Sub ProcessStock(wsSource As Worksheet, sourceRow As Long, wsTarget As Worksheet
     wsTarget.Cells(targetRow, 10).Value = wsSource.Cells(sourceRow, 11).Value ' J: P&L
     wsTarget.Cells(targetRow, 11).Value = wsSource.Cells(sourceRow, 8).Value  ' K: Attribution
 
-    ' D: % Diff (Cost) - calculated from Current Px vs Unit Cost
-    wsTarget.Cells(targetRow, 4).Formula = "=(G" & targetRow & "-F" & targetRow & ")/F" & targetRow
+    ' D: % Diff (Cost) - calculated from Current Px vs Unit Cost (Fix 2: IFERROR for divide-by-zero)
+    wsTarget.Cells(targetRow, 4).Formula = "=IFERROR((G" & targetRow & "-F" & targetRow & ")/F" & targetRow & ",0)"
 End Sub
 
 ' ====================================================================
@@ -860,7 +869,19 @@ Sub ProcessOption(wsSource As Worksheet, sourceRow As Long, wsTarget As Workshee
         wsTarget.Cells(targetRow, 7).Value = ""
     End If
 
-    wsTarget.Cells(targetRow, 8).Value = expiry                ' H: Expiry
+    ' H: Expiry - convert to date and format immediately (Fix 3)
+    If expiry <> "" Then
+        On Error Resume Next
+        wsTarget.Cells(targetRow, 8).Value = CDate(expiry)
+        wsTarget.Cells(targetRow, 8).NumberFormat = "mm/dd/yyyy"  ' Apply format immediately
+        If Err.Number <> 0 Then
+            wsTarget.Cells(targetRow, 8).Value = expiry  ' Fall back to string if not a valid date
+            Err.Clear
+        End If
+        On Error GoTo 0
+    Else
+        wsTarget.Cells(targetRow, 8).Value = ""
+    End If
     wsTarget.Cells(targetRow, 9).Value = wsSource.Cells(sourceRow, 5).Value   ' I: Unit Cost
     wsTarget.Cells(targetRow, 10).Value = wsSource.Cells(sourceRow, 9).Value  ' J: Total Cost
     wsTarget.Cells(targetRow, 11).Value = wsSource.Cells(sourceRow, 6).Value  ' K: Current Px
@@ -996,8 +1017,8 @@ Sub FormatStocksSheet(ws As Worksheet, lastRow As Long)
         Next i
     End If
 
-    ' Set column widths - narrower Name column
-    ws.Columns("A").ColumnWidth = 30  ' Name - narrower
+    ' Set column widths - wider Name column for stock names
+    ws.Columns("A").ColumnWidth = 47  ' Name - wider for full stock names
     ws.Columns("B:K").AutoFit
 
     ' Add borders
@@ -1025,6 +1046,10 @@ Sub FormatOptionsSheet(ws As Worksheet, lastPutRow As Long, lastCallRow As Long)
     ws.Range("E:E").NumberFormat = "#,##0"         ' Strike Px (no $)
     ws.Range("F:F").NumberFormat = "#,##0"         ' Underlying Px (no $)
     ws.Range("G:G").NumberFormat = "0.00%"         ' % Moneyness
+    ws.Range("H:H").NumberFormat = "mm/dd/yyyy"   ' Expiry (Fix 3: format as date)
+    ' Also explicitly format expiry data rows to ensure date display
+    If lastPutRow > 4 Then ws.Range("H5:H" & lastPutRow).NumberFormat = "mm/dd/yyyy"
+    If lastCallRow > lastPutRow + 2 Then ws.Range("H" & (lastPutRow + 3) & ":H" & lastCallRow).NumberFormat = "mm/dd/yyyy"
     ws.Range("I:L").NumberFormat = "#,##0"         ' Unit Cost, Total Cost, Current Px, Mkt Value (no $)
     ws.Range("M:M").NumberFormat = "#,##0"         ' P&L (no $)
 
@@ -1077,8 +1102,8 @@ Sub FormatOptionsSheet(ws As Worksheet, lastPutRow As Long, lastCallRow As Long)
         Next i
     End If
 
-    ' Set column widths - narrower Name column
-    ws.Columns("A").ColumnWidth = 30  ' Name - narrower
+    ' Set column widths
+    ws.Columns("A").ColumnWidth = 30  ' Name
     ws.Columns("B:M").AutoFit
 
     ' Add borders
@@ -1107,7 +1132,8 @@ Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As 
     Dim stockCount As Long
 
     ' Calculate totals from Stocks sheet
-    stockCount = lastStockRow - 4
+    Dim posName As String
+    stockCount = 0
     totalMktValue = 0
     totalPnL = 0
     totalCost = 0
@@ -1116,6 +1142,22 @@ Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As 
         If IsNumeric(wsStocks.Cells(i, 9).Value) Then totalMktValue = totalMktValue + wsStocks.Cells(i, 9).Value
         If IsNumeric(wsStocks.Cells(i, 10).Value) Then totalPnL = totalPnL + wsStocks.Cells(i, 10).Value
         If IsNumeric(wsStocks.Cells(i, 8).Value) Then totalCost = totalCost + wsStocks.Cells(i, 8).Value
+        ' Count only non-cash positions (Fix 6)
+        posName = wsStocks.Cells(i, 1).Value
+        If posName <> "USD" And posName <> "JPY" And posName <> "CAD" And posName <> "EUR" And posName <> "GBP" Then
+            stockCount = stockCount + 1
+        End If
+    Next i
+
+    ' Add Options P&L to total (Fix 1)
+    Dim wsOptions As Worksheet
+    Dim lastOptionRow As Long
+    Set wsOptions = wsDash.Parent.Sheets("Options")
+    lastOptionRow = wsOptions.Cells(wsOptions.Rows.Count, 1).End(xlUp).Row
+
+    For i = 4 To lastOptionRow
+        ' Column M (13) is P&L on Options sheet
+        If IsNumeric(wsOptions.Cells(i, 13).Value) Then totalPnL = totalPnL + wsOptions.Cells(i, 13).Value
     Next i
 
     ' ====== KPI SECTION (Top of Dashboard) ======
@@ -1283,11 +1325,11 @@ Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As 
             wsDash.Cells(pieDataStart + 1 + i, 2).Value = holdings(i, 2)
         Next i
 
-        ' Calculate "Other"
+        ' Calculate "Other" as Total - Top 5 (Fix 4: avoids floating-point rounding errors)
         If holdingCount > 5 Then
-            For i = 6 To holdingCount
-                otherValue = otherValue + holdings(i, 2)
-            Next i
+            Dim top5Sum As Double
+            top5Sum = holdings(1, 2) + holdings(2, 2) + holdings(3, 2) + holdings(4, 2) + holdings(5, 2)
+            otherValue = totalMktValue - top5Sum
             wsDash.Cells(pieDataStart + 7, 1).Value = "Other"
             wsDash.Cells(pieDataStart + 7, 2).Value = otherValue
             pieCount = 6
@@ -1414,7 +1456,7 @@ Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As 
     End If
 
     ' Format column widths
-    wsDash.Columns("A").ColumnWidth = 35
+    wsDash.Columns("A").ColumnWidth = 40
     wsDash.Columns("B").ColumnWidth = 15
     wsDash.Columns("C").ColumnWidth = 18  ' YTD P&L needs more space
     wsDash.Columns("D:G").ColumnWidth = 12

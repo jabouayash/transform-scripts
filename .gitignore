@@ -1,6 +1,9 @@
 # Ignore sensitive fund reports
 reports/
 
+# Claude Code working directory
+.claude/
+
 # Python virtual environment (if used for testing)
 .venv/
 
@@ -20,3 +23,8 @@ Transformed_Portfolio_*.xlsx
 
 # Personal drafts - do not commit
 dist/*/docs/RESPONSES.md
+
+# Temporary/alternative zip builds
+dist/*_email.zip
+dist/*_protected.zip
+dist/Mobius_Setup.zip
