@@ -1,6 +1,6 @@
 # Mobius Portfolio Report Automation
 
-Automated system for transforming daily NAV (Net Asset Value) reports into structured portfolio reports with Bloomberg API integration.
+Automated system for transforming daily NAV (Net Asset Value) reports into structured portfolio reports with a visual dashboard.
 
 ## Overview
 
@@ -15,8 +15,8 @@ This system monitors Outlook for incoming daily report emails, extracts attachme
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
 │                    EXCEL                                     │
-│  Transforms NAV data into Stocks + Options tabs             │
-│  Adds Bloomberg live price formulas                         │
+│  Transforms NAV data into Dashboard + Stocks + Options tabs │
+│  Creates visual charts and KPI summaries                    │
 │  Outputs formatted report                                   │
 └─────────────────────────────────────────────────────────────┘
 ```

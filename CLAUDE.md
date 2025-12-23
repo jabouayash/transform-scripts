@@ -65,13 +65,14 @@ Private Const SUBJECT_CUSTOM As String = "Mobius Emerging Opportunities Fund LP|
 Private Const SUBJECT_DAILY As String = "Mobius Emerging Opportunities Fund LP| Daily Reports"
 ```
 
-## Bloomberg Integration
+## Data Flow (No External Dependencies)
 
-Uses BDP() formulas:
-- `=BDP("TICKER Equity", "PX_LAST")` - Stock prices
-- `=BDP("OCC_TICKER Equity", "OPT_UNDL_PX")` - Option underlying prices
+As of v5.3, all data comes from the NAV reports - no Bloomberg Terminal required:
+- Stock prices: Read from "Today USD" column in source file
+- Option underlying prices: Looked up from stock positions in same report
+- FX conversion: Applied for non-USD tickers (JP, LN, GY suffixes)
 
-OCC format: `META  260116P00700000` (TICKER  YYMMDD[P/C]STRIKE)
+OCC format for options: `META  260116P00700000` (TICKER  YYMMDD[P/C]STRIKE)
 
 ## Testing
 
