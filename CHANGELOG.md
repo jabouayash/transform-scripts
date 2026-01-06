@@ -9,6 +9,35 @@ Format: [Semantic Versioning](https://semver.org/) - MAJOR.MINOR.PATCH
 
 ---
 
+## [5.6.2] - 2026-01-01
+### Changed
+- Removed empty row 1 from Stocks and Options tabs (headers now start at row 1)
+- Data now starts at row 3 for Stocks, row 4 for Options (saves one row)
+
+---
+
+## [5.6.1] - 2026-01-01
+### Fixed
+- Performance line chart now positioned at top-right of Dashboard (was overlapping data)
+- Name column now wraps text to new line instead of cutting off (per John's feedback)
+- CSV line ending handling works with both Unix and Windows formats
+
+---
+
+## [5.6.0] - 2025-12-23
+### Added
+- Performance history tracking (saves daily metrics to Performance_History.csv)
+- Performance line chart showing portfolio value over time (Robinhood-style)
+- Chart appears automatically after 2+ days of data accumulates
+- Version indicator on Dashboard title (v5.6)
+
+### Changed
+- Narrower columns with text-wrapped headers for better readability
+- Numeric columns now have fixed widths (8-12) instead of AutoFit
+- Header rows allow text wrapping for longer column names
+
+---
+
 ## [5.5.0] - 2025-12-22
 ### Fixed
 - Dashboard YTD P&L now includes Options P&L (was showing only Stocks)

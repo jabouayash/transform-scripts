@@ -46,6 +46,10 @@ Private Const FILE_DAILY As String = "Gain And Exposure_MOBIUS EMERGING OPPORTUN
 ' Path to your Excel transformer workbook (with the VBA macro)
 Private Const EXCEL_TRANSFORMER_PATH As String = "C:\Mobius Reports\Portfolio Transformer.xlsm"
 
+' Logging and persistence files
+Private Const LOG_FILE As String = "C:\Mobius Reports\monitor_log.txt"
+Private Const TRACKER_FILE As String = "C:\Mobius Reports\email_tracker.txt"
+
 ' ============================================
 ' TRACKING VARIABLES
 ' ============================================
@@ -59,10 +63,8 @@ Private emailTracker As Object
 Private WithEvents InboxItems As Outlook.Items
 
 Private Sub Application_Startup()
-    ' Initialize when Outlook starts
+    ' Initialize when Outlook starts (silent - no popup)
     Call InitializeMonitor
-    MsgBox "Mobius Report Monitor is now active." & vbCrLf & vbCrLf & _
-           "Watching for daily NAV report emails.", vbInformation, "Monitor Started"
 End Sub
 
 Public Sub InitializeMonitor()
@@ -76,6 +78,11 @@ Public Sub InitializeMonitor()
 
     ' Create folders if they don't exist
     Call EnsureFoldersExist
+
+    ' Load any saved tracker state (survives Outlook restart)
+    Call LoadTracker
+
+    Call WriteLog("Monitor initialized")
 End Sub
 
 ' ============================================
@@ -95,7 +102,7 @@ Private Sub InboxItems_ItemAdd(ByVal Item As Object)
     Exit Sub
 ErrorHandler:
     ' Silent fail - don't interrupt user for errors
-    Debug.Print "Error in ItemAdd: " & Err.Description
+    Call WriteLog("ERROR in ItemAdd: " & Err.Description)
 End Sub
 
 ' ============================================
@@ -125,7 +132,7 @@ Private Sub ProcessIncomingEmail(mail As Outlook.MailItem)
     End If
 
     If reportDate = "" Then
-        Debug.Print "Could not extract date from subject: " & subject
+        Call WriteLog("Could not extract date from subject: " & subject)
         Exit Sub
     End If
 
@@ -190,11 +197,16 @@ End Function
 Private Sub UpdateTracker(reportDate As String, emailType As String)
     If Not emailTracker.Exists(reportDate) Then
         emailTracker(reportDate) = emailType
+        Call WriteLog("Received " & emailType & " report for " & FormatReportDate(reportDate))
     ElseIf emailTracker(reportDate) <> emailType Then
         ' We now have both types
         emailTracker(reportDate) = "BOTH"
+        Call WriteLog("Received " & emailType & " report for " & FormatReportDate(reportDate) & " - BOTH now received")
     End If
     ' If same type arrives twice, just keep the existing value
+
+    ' Save tracker state to file (survives Outlook restart)
+    Call SaveTracker
 End Sub
 
 ' ============================================
@@ -225,7 +237,7 @@ Private Sub SaveAttachments(mail As Outlook.MailItem, emailType As String, repor
                 End If
 
                 att.SaveAsFile savePath
-                Debug.Print "Saved: " & savePath
+                Call WriteLog("Saved attachment: " & att.FileName)
             End If
         End If
     Next att
@@ -245,11 +257,13 @@ Private Sub TriggerTransformation(reportDate As String)
 
     ' Verify both files exist
     If Dir(customFile) = "" Then
+        Call WriteLog("ERROR: Custom file not found: " & customFile)
         MsgBox "Custom file not found: " & customFile, vbExclamation, "File Missing"
         Exit Sub
     End If
 
     If Dir(dailyFile) = "" Then
+        Call WriteLog("ERROR: Daily file not found: " & dailyFile)
         MsgBox "Daily file not found: " & dailyFile, vbExclamation, "File Missing"
         Exit Sub
     End If
@@ -265,6 +279,10 @@ Private Sub TriggerTransformation(reportDate As String)
 
     ' Launch Excel and run the transformation
     Call RunExcelTransformation(customFile, dailyFile, reportDate)
+
+    ' Archive processed files
+    Call ArchiveProcessedFiles(reportDate)
+    Call WriteLog("Transformation completed for " & FormatReportDate(reportDate))
 End Sub
 
 Private Sub RunExcelTransformation(customFile As String, dailyFile As String, reportDate As String)
@@ -314,6 +332,7 @@ Private Sub RunExcelTransformation(customFile As String, dailyFile As String, re
     Exit Sub
 
 ErrorHandler:
+    Call WriteLog("ERROR in RunExcelTransformation: " & Err.Description)
     MsgBox "Error during transformation: " & Err.Description & vbCrLf & vbCrLf & _
            "Please run the macro manually.", vbExclamation, "Error"
 End Sub
@@ -449,6 +468,8 @@ End Sub
 Public Sub ResetTracker()
     ' Reset the email tracker (for testing)
     Set emailTracker = CreateObject("Scripting.Dictionary")
+    Call SaveTracker ' Clear the tracker file too
+    Call WriteLog("Tracker reset by user")
     MsgBox "Email tracker has been reset.", vbInformation, "Reset Complete"
 End Sub
 
@@ -469,4 +490,125 @@ Public Sub ShowTrackerState()
     End If
 
     MsgBox msg, vbInformation, "Email Tracker State"
+End Sub
+
+' ============================================
+' LOGGING - Persistent log to file
+' ============================================
+Private Sub WriteLog(message As String)
+    ' Writes timestamped log entry to file
+    Dim fso As Object
+    Dim logFile As Object
+    Dim timestamp As String
+
+    On Error Resume Next
+
+    timestamp = Format(Now, "yyyy-mm-dd hh:mm:ss")
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set logFile = fso.OpenTextFile(LOG_FILE, 8, True) ' 8 = append, True = create if missing
+    logFile.WriteLine timestamp & " - " & message
+    logFile.Close
+
+    ' Also write to debug for immediate window
+    Debug.Print timestamp & " - " & message
+
+    On Error GoTo 0
+End Sub
+
+' ============================================
+' TRACKER PERSISTENCE - Survives Outlook restart
+' ============================================
+Private Sub SaveTracker()
+    ' Saves tracker state to file
+    Dim fso As Object
+    Dim trackerFile As Object
+    Dim key As Variant
+
+    On Error Resume Next
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set trackerFile = fso.CreateTextFile(TRACKER_FILE, True) ' True = overwrite
+
+    If Not emailTracker Is Nothing Then
+        For Each key In emailTracker.Keys
+            trackerFile.WriteLine CStr(key) & "=" & emailTracker(key)
+        Next key
+    End If
+
+    trackerFile.Close
+
+    On Error GoTo 0
+End Sub
+
+Private Sub LoadTracker()
+    ' Loads tracker state from file
+    Dim fso As Object
+    Dim trackerFile As Object
+    Dim line As String
+    Dim parts() As String
+
+    On Error Resume Next
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    If fso.FileExists(TRACKER_FILE) Then
+        Set trackerFile = fso.OpenTextFile(TRACKER_FILE, 1) ' 1 = read
+
+        Do While Not trackerFile.AtEndOfStream
+            line = trackerFile.ReadLine
+            If InStr(line, "=") > 0 Then
+                parts = Split(line, "=")
+                If UBound(parts) >= 1 Then
+                    ' Only load if not already "BOTH" (already processed)
+                    If parts(1) <> "BOTH" Then
+                        emailTracker(parts(0)) = parts(1)
+                    End If
+                End If
+            End If
+        Loop
+
+        trackerFile.Close
+        Call WriteLog("Loaded tracker state: " & emailTracker.Count & " pending dates")
+    End If
+
+    On Error GoTo 0
+End Sub
+
+' ============================================
+' FILE ARCHIVING - Move processed files
+' ============================================
+Private Sub ArchiveProcessedFiles(reportDate As String)
+    ' Moves processed files from Incoming to Archive
+    Dim fso As Object
+    Dim customFile As String
+    Dim dailyFile As String
+    Dim archiveCustom As String
+    Dim archiveDaily As String
+
+    On Error Resume Next
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    ' Build file paths
+    customFile = INCOMING_FOLDER & "\" & FILE_CUSTOM & "_" & reportDate & ".XLSX"
+    dailyFile = INCOMING_FOLDER & "\" & FILE_DAILY & "_" & reportDate & ".XLSX"
+    archiveCustom = ARCHIVE_FOLDER & "\" & FILE_CUSTOM & "_" & reportDate & ".XLSX"
+    archiveDaily = ARCHIVE_FOLDER & "\" & FILE_DAILY & "_" & reportDate & ".XLSX"
+
+    ' Move custom file
+    If fso.FileExists(customFile) Then
+        If fso.FileExists(archiveCustom) Then fso.DeleteFile archiveCustom
+        fso.MoveFile customFile, archiveCustom
+        Call WriteLog("Archived: " & FILE_CUSTOM & "_" & reportDate & ".XLSX")
+    End If
+
+    ' Move daily file
+    If fso.FileExists(dailyFile) Then
+        If fso.FileExists(archiveDaily) Then fso.DeleteFile archiveDaily
+        fso.MoveFile dailyFile, archiveDaily
+        Call WriteLog("Archived: " & FILE_DAILY & "_" & reportDate & ".XLSX")
+    End If
+
+    On Error GoTo 0
 End Sub

@@ -1,7 +1,20 @@
 ' ====================================================================
-' Portfolio Data Transformer - Version 5.4
+' Portfolio Data Transformer - Version 5.6.2
 ' ====================================================================
-' WHAT'S NEW IN V5.4:
+' WHAT'S NEW IN V5.6:
+'   - Narrower columns with text-wrapped headers for better readability
+'   - Performance history tracking (saves daily metrics to CSV)
+'   - Performance line chart (shows portfolio value over time)
+'
+' PREVIOUS (V5.5):
+'   - Dashboard YTD P&L includes Options P&L
+'   - Fixed Portfolio Allocation "Other" calculation
+'   - Options expiry dates formatted as MM/DD/YYYY
+'   - IFERROR wrapper on % Diff formula
+'   - Holdings count excludes cash positions
+'   - GOOG options look up GOOGL stock price
+'
+' PREVIOUS (V5.4):
 '   - Added Dashboard sheet with charts (appears first in workbook)
 '   - KPI summary: Total Portfolio Value, YTD P&L, YTD Return, Holdings count
 '   - Bar chart: Top 10 holdings by market value
@@ -248,8 +261,8 @@ Sub TransformBloombergData()
     Dim callRow As Long
     Dim optionPutRows As Long
 
-    stockRow = 4
-    putRow = 5
+    stockRow = 3      ' Data starts at row 3 (after headers in rows 1-2)
+    putRow = 4        ' Options data starts at row 4 (after headers in rows 1-3)
     optionPutRows = 0
 
     ' Count puts first
@@ -269,11 +282,11 @@ Sub TransformBloombergData()
     wsOptions.Cells(callRow - 1, 1).Value = "CALLS"
     wsOptions.Cells(callRow - 1, 1).Font.Bold = True
     wsOptions.Cells(callRow - 1, 1).Font.Size = 12
-    wsOptions.Range("I3:M3").Copy wsOptions.Range("I" & (callRow - 1))
-    wsOptions.Range("A4:M4").Copy wsOptions.Range("A" & callRow)
+    wsOptions.Range("I2:M2").Copy wsOptions.Range("I" & (callRow - 1))
+    wsOptions.Range("A3:M3").Copy wsOptions.Range("A" & callRow)
     callRow = callRow + 1
 
-    putRow = 5
+    putRow = 4        ' Reset to row 4 for options data
 
     ' Process all rows
     For i = 6 To lastRow
@@ -337,8 +350,8 @@ Sub TransformBloombergData()
     Dim msg As String
     msg = "Transformation complete!" & vbCrLf & vbCrLf
     msg = msg & "File saved: " & outputPath & vbCrLf & vbCrLf
-    msg = msg & "Stocks processed: " & (stockRow - 4) & vbCrLf
-    msg = msg & "Options processed: " & (putRow - 5 + callRow - (putRow + optionPutRows + 3)) & vbCrLf & vbCrLf
+    msg = msg & "Stocks processed: " & (stockRow - 3) & vbCrLf
+    msg = msg & "Options processed: " & (putRow - 4 + callRow - (putRow + optionPutRows + 3)) & vbCrLf & vbCrLf
 
     msg = msg & "Performance Data:" & vbCrLf
     If ytdFundReturnFound Then
@@ -643,92 +656,99 @@ End Function
 ' ====================================================================
 
 Sub SetupStocksHeaders(ws As Worksheet)
-    ' Row 2: Column headers (bold gray text)
-    ' NEW ORDER: Name, Ticker, Portfolio Wgt, % Diff, Daily Chg %, Unit Cost, Current Px, Total Cost, Mkt Value, P&L, Attribution
-    ws.Cells(2, 1).Value = "Name"
-    ws.Cells(2, 2).Value = "Ticker"
-    ws.Cells(2, 3).Value = "Portfolio Wgt"
-    ws.Cells(2, 4).Value = "% Diff (Cost)"
-    ws.Cells(2, 5).Value = "Daily Chg %"
-    ws.Cells(2, 6).Value = "Unit Cost"
-    ws.Cells(2, 7).Value = "Current Px"
-    ws.Cells(2, 8).Value = "Total Cost"
-    ws.Cells(2, 9).Value = "Mkt Value"
-    ws.Cells(2, 10).Value = "P&L"
-    ws.Cells(2, 11).Value = "Attribution"
+    ' Row 1: Column headers (bold gray text)
+    ' ORDER: Name, Ticker, Portfolio Wgt, % Diff, Daily Chg %, Unit Cost, Current Px, Total Cost, Mkt Value, P&L, Attribution
+    ws.Cells(1, 1).Value = "Name"
+    ws.Cells(1, 2).Value = "Ticker"
+    ws.Cells(1, 3).Value = "Portfolio Wgt"
+    ws.Cells(1, 4).Value = "% Diff (Cost)"
+    ws.Cells(1, 5).Value = "Daily Chg %"
+    ws.Cells(1, 6).Value = "Unit Cost"
+    ws.Cells(1, 7).Value = "Current Px"
+    ws.Cells(1, 8).Value = "Total Cost"
+    ws.Cells(1, 9).Value = "Mkt Value"
+    ws.Cells(1, 10).Value = "P&L"
+    ws.Cells(1, 11).Value = "Attribution"
 
-    ' Row 3: Sub-headers (navy blue background, white text)
-    ws.Cells(3, 3).Value = "%"
-    ws.Cells(3, 4).Value = "%"
-    ws.Cells(3, 5).Value = "%"
-    ws.Cells(3, 6).Value = "USD"
-    ws.Cells(3, 7).Value = "USD"
-    ws.Cells(3, 8).Value = "USD"
-    ws.Cells(3, 9).Value = "USD"
-    ws.Cells(3, 10).Value = "YTD"
-    ws.Cells(3, 11).Value = "%"
+    ' Row 2: Sub-headers (navy blue background, white text)
+    ws.Cells(2, 3).Value = "%"
+    ws.Cells(2, 4).Value = "%"
+    ws.Cells(2, 5).Value = "%"
+    ws.Cells(2, 6).Value = "USD"
+    ws.Cells(2, 7).Value = "USD"
+    ws.Cells(2, 8).Value = "USD"
+    ws.Cells(2, 9).Value = "USD"
+    ws.Cells(2, 10).Value = "YTD"
+    ws.Cells(2, 11).Value = "%"
 
-    ' Format header row (row 2) - bold gray text
-    With ws.Range("A2:K2")
+    ' Format header row (row 1) - bold gray text with text wrap
+    With ws.Range("A1:K1")
         .Font.Bold = True
         .Font.Color = COLOR_HEADER_GRAY
         .HorizontalAlignment = xlCenter
+        .WrapText = True
     End With
+    ws.Rows(1).RowHeight = 30  ' Allow 2 lines for wrapped text
 
-    ' Format sub-header row (row 3) - navy blue background, white text
-    With ws.Range("A3:K3")
+    ' Format sub-header row (row 2) - navy blue background, white text
+    With ws.Range("A2:K2")
         .Font.Bold = True
         .Font.Color = COLOR_WHITE
         .Interior.Color = COLOR_NAVY_BLUE
         .HorizontalAlignment = xlCenter
+        .WrapText = True
     End With
+    ws.Rows(2).RowHeight = 25
 End Sub
 
 Sub SetupOptionsHeaders(ws As Worksheet)
-    ' Row 2: Section title "PUTS"
-    ws.Cells(2, 1).Value = "PUTS"
-    ws.Cells(2, 1).Font.Bold = True
-    ws.Cells(2, 1).Font.Size = 12
-    ws.Cells(2, 1).Font.Color = COLOR_HEADER_GRAY
+    ' Row 1: Section title "PUTS"
+    ws.Cells(1, 1).Value = "PUTS"
+    ws.Cells(1, 1).Font.Bold = True
+    ws.Cells(1, 1).Font.Size = 12
+    ws.Cells(1, 1).Font.Color = COLOR_HEADER_GRAY
 
-    ' Row 3: Column group headers (navy blue background, white text)
-    ' NEW: No Yield column, starts at A
-    ws.Cells(3, 9).Value = "Unit Cost"
-    ws.Cells(3, 10).Value = "Total Cost"
-    ws.Cells(3, 11).Value = "Current Px"
-    ws.Cells(3, 12).Value = "Mkt Value"
-    ws.Cells(3, 13).Value = "P&L ($)"
+    ' Row 2: Column group headers (navy blue background, white text)
+    ws.Cells(2, 9).Value = "Unit Cost"
+    ws.Cells(2, 10).Value = "Total Cost"
+    ws.Cells(2, 11).Value = "Current Px"
+    ws.Cells(2, 12).Value = "Mkt Value"
+    ws.Cells(2, 13).Value = "P&L ($)"
 
-    ' Row 4: Sub-headers with units (NO Yield % column)
-    ws.Cells(4, 1).Value = "Name"
-    ws.Cells(4, 2).Value = "Quantity"
-    ws.Cells(4, 3).Value = "Underlying Qty"
-    ws.Cells(4, 4).Value = "% Hedged"
-    ws.Cells(4, 5).Value = "Strike Px"
-    ws.Cells(4, 6).Value = "Underlying Px"
-    ws.Cells(4, 7).Value = "% Moneyness"
-    ws.Cells(4, 8).Value = "Expiry"
-    ws.Cells(4, 9).Value = "USD"
-    ws.Cells(4, 10).Value = "USD"
-    ws.Cells(4, 11).Value = "USD"
-    ws.Cells(4, 12).Value = "USD"
-    ws.Cells(4, 13).Value = "YTD"
+    ' Row 3: Sub-headers with units
+    ws.Cells(3, 1).Value = "Name"
+    ws.Cells(3, 2).Value = "Quantity"
+    ws.Cells(3, 3).Value = "Underlying Qty"
+    ws.Cells(3, 4).Value = "% Hedged"
+    ws.Cells(3, 5).Value = "Strike Px"
+    ws.Cells(3, 6).Value = "Underlying Px"
+    ws.Cells(3, 7).Value = "% Moneyness"
+    ws.Cells(3, 8).Value = "Expiry"
+    ws.Cells(3, 9).Value = "USD"
+    ws.Cells(3, 10).Value = "USD"
+    ws.Cells(3, 11).Value = "USD"
+    ws.Cells(3, 12).Value = "USD"
+    ws.Cells(3, 13).Value = "YTD"
 
-    ' Format row 3 - navy blue background, white text for column group headers
-    With ws.Range("I3:M3")
+    ' Format row 2 - navy blue background, white text for column group headers
+    With ws.Range("I2:M2")
         .Font.Bold = True
         .Font.Color = COLOR_WHITE
         .Interior.Color = COLOR_NAVY_BLUE
         .HorizontalAlignment = xlCenter
+        .WrapText = True
     End With
 
-    ' Format row 4 - navy blue background, white text for sub-headers
-    With ws.Range("A4:M4")
+    ' Format row 3 - navy blue background, white text for sub-headers with text wrap
+    With ws.Range("A3:M3")
         .Font.Bold = True
         .Font.Color = COLOR_WHITE
         .Interior.Color = COLOR_NAVY_BLUE
         .HorizontalAlignment = xlCenter
+        .WrapText = True
     End With
+    ws.Rows(2).RowHeight = 25
+    ws.Rows(3).RowHeight = 30  ' Allow 2 lines for wrapped text
 End Sub
 
 ' ====================================================================
@@ -993,22 +1013,22 @@ End Sub
 Sub FormatStocksSheet(ws As Worksheet, lastRow As Long)
     Dim i As Long
 
-    If lastRow > 4 Then
+    If lastRow > 3 Then
         ' Number formats - NO currency symbols, rounded to nearest dollar
         ' A=Name, B=Ticker, C=Portfolio Wgt, D=% Diff, E=Daily Chg, F=Unit Cost, G=Current Px, H=Total Cost, I=Mkt Value, J=P&L, K=Attribution
-        ws.Range("C4:C" & lastRow).NumberFormat = "0.00%"      ' Portfolio Wgt
-        ws.Range("D4:D" & lastRow).NumberFormat = "0.00%"      ' % Diff
-        ws.Range("E4:E" & lastRow).NumberFormat = "0.00%"      ' Daily Chg
-        ws.Range("F4:G" & lastRow).NumberFormat = "#,##0"      ' Unit Cost, Current Px (rounded, no $)
-        ws.Range("H4:I" & lastRow).NumberFormat = "#,##0"      ' Total Cost, Mkt Value (rounded, no $)
-        ws.Range("J4:J" & lastRow).NumberFormat = "#,##0"      ' P&L (no $)
-        ws.Range("K4:K" & lastRow).NumberFormat = "0.00%"      ' Attribution
+        ws.Range("C3:C" & lastRow).NumberFormat = "0.00%"      ' Portfolio Wgt
+        ws.Range("D3:D" & lastRow).NumberFormat = "0.00%"      ' % Diff
+        ws.Range("E3:E" & lastRow).NumberFormat = "0.00%"      ' Daily Chg
+        ws.Range("F3:G" & lastRow).NumberFormat = "#,##0"      ' Unit Cost, Current Px (rounded, no $)
+        ws.Range("H3:I" & lastRow).NumberFormat = "#,##0"      ' Total Cost, Mkt Value (rounded, no $)
+        ws.Range("J3:J" & lastRow).NumberFormat = "#,##0"      ' P&L (no $)
+        ws.Range("K3:K" & lastRow).NumberFormat = "0.00%"      ' Attribution
 
         ' Apply alternating row colors (zebra striping) and font color
-        For i = 4 To lastRow
+        For i = 3 To lastRow
             With ws.Range("A" & i & ":K" & i)
                 .Font.Color = COLOR_DARK_GRAY
-                If (i Mod 2) = 0 Then
+                If (i Mod 2) = 1 Then
                     .Interior.Color = COLOR_WHITE
                 Else
                     .Interior.Color = COLOR_LIGHT_GRAY
@@ -1017,13 +1037,25 @@ Sub FormatStocksSheet(ws As Worksheet, lastRow As Long)
         Next i
     End If
 
-    ' Set column widths - wider Name column for stock names
-    ws.Columns("A").ColumnWidth = 47  ' Name - wider for full stock names
-    ws.Columns("B:K").AutoFit
+    ' Set column widths - narrower with wrapped text (v5.6)
+    ws.Columns("A").ColumnWidth = 25      ' Name (narrow, text wraps)
+    ws.Columns("B").ColumnWidth = 8       ' Ticker (text wraps if needed)
+    ws.Columns("C").ColumnWidth = 10      ' Portfolio Wgt
+    ws.Columns("D").ColumnWidth = 10      ' % Diff
+    ws.Columns("E").ColumnWidth = 10      ' Daily Chg
+    ws.Columns("F").ColumnWidth = 10      ' Unit Cost
+    ws.Columns("G").ColumnWidth = 10      ' Current Px
+    ws.Columns("H").ColumnWidth = 12      ' Total Cost
+    ws.Columns("I").ColumnWidth = 12      ' Mkt Value
+    ws.Columns("J").ColumnWidth = 12      ' P&L
+    ws.Columns("K").ColumnWidth = 10      ' Attribution
+
+    ' Enable text wrap on Name and Ticker columns so long text wraps to new line
+    ws.Columns("A:B").WrapText = True
 
     ' Add borders
-    If lastRow > 4 Then
-        With ws.Range("A2:K" & lastRow).Borders
+    If lastRow > 3 Then
+        With ws.Range("A1:K" & lastRow).Borders
             .LineStyle = xlContinuous
             .Weight = xlThin
             .Color = RGB(200, 200, 200)
@@ -1048,7 +1080,7 @@ Sub FormatOptionsSheet(ws As Worksheet, lastPutRow As Long, lastCallRow As Long)
     ws.Range("G:G").NumberFormat = "0.00%"         ' % Moneyness
     ws.Range("H:H").NumberFormat = "mm/dd/yyyy"   ' Expiry (Fix 3: format as date)
     ' Also explicitly format expiry data rows to ensure date display
-    If lastPutRow > 4 Then ws.Range("H5:H" & lastPutRow).NumberFormat = "mm/dd/yyyy"
+    If lastPutRow > 3 Then ws.Range("H4:H" & lastPutRow).NumberFormat = "mm/dd/yyyy"
     If lastCallRow > lastPutRow + 2 Then ws.Range("H" & (lastPutRow + 3) & ":H" & lastCallRow).NumberFormat = "mm/dd/yyyy"
     ws.Range("I:L").NumberFormat = "#,##0"         ' Unit Cost, Total Cost, Current Px, Mkt Value (no $)
     ws.Range("M:M").NumberFormat = "#,##0"         ' P&L (no $)
@@ -1056,8 +1088,8 @@ Sub FormatOptionsSheet(ws As Worksheet, lastPutRow As Long, lastCallRow As Long)
     ' Find CALLS header row (it's 2 rows after the last PUT)
     callHeaderRow = lastPutRow + 2
 
-    ' Apply alternating row colors for PUTS section (starting row 5)
-    For i = 5 To lastPutRow
+    ' Apply alternating row colors for PUTS section (starting row 4)
+    For i = 4 To lastPutRow
         With ws.Range("A" & i & ":M" & i)
             .Font.Color = COLOR_DARK_GRAY
             If (i Mod 2) = 1 Then
@@ -1069,7 +1101,7 @@ Sub FormatOptionsSheet(ws As Worksheet, lastPutRow As Long, lastCallRow As Long)
     Next i
 
     ' Format CALLS header row with navy blue
-    If callHeaderRow > 5 Then
+    If callHeaderRow > 4 Then
         ' CALLS title
         ws.Cells(callHeaderRow - 1, 1).Font.Color = COLOR_HEADER_GRAY
 
@@ -1102,13 +1134,27 @@ Sub FormatOptionsSheet(ws As Worksheet, lastPutRow As Long, lastCallRow As Long)
         Next i
     End If
 
-    ' Set column widths
-    ws.Columns("A").ColumnWidth = 30  ' Name
-    ws.Columns("B:M").AutoFit
+    ' Set column widths - narrower with wrapped text (v5.6)
+    ws.Columns("A").ColumnWidth = 25      ' Name (narrow, text wraps)
+    ws.Columns("B").ColumnWidth = 9       ' Quantity
+    ws.Columns("C").ColumnWidth = 10      ' Underlying Qty
+    ws.Columns("D").ColumnWidth = 9       ' % Hedged
+    ws.Columns("E").ColumnWidth = 9       ' Strike Px
+    ws.Columns("F").ColumnWidth = 10      ' Underlying Px
+    ws.Columns("G").ColumnWidth = 10      ' % Moneyness
+    ws.Columns("H").ColumnWidth = 11      ' Expiry
+    ws.Columns("I").ColumnWidth = 10      ' Unit Cost
+    ws.Columns("J").ColumnWidth = 10      ' Total Cost
+    ws.Columns("K").ColumnWidth = 10      ' Current Px
+    ws.Columns("L").ColumnWidth = 10      ' Mkt Value
+    ws.Columns("M").ColumnWidth = 10      ' P&L
+
+    ' Enable text wrap on Name column so long option names wrap to new line
+    ws.Columns("A").WrapText = True
 
     ' Add borders
-    If lastRow > 4 Then
-        With ws.Range("A2:M" & lastRow).Borders
+    If lastRow > 3 Then
+        With ws.Range("A1:M" & lastRow).Borders
             .LineStyle = xlContinuous
             .Weight = xlThin
             .Color = RGB(200, 200, 200)
@@ -1138,7 +1184,7 @@ Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As 
     totalPnL = 0
     totalCost = 0
 
-    For i = 4 To lastStockRow - 1
+    For i = 3 To lastStockRow - 1
         If IsNumeric(wsStocks.Cells(i, 9).Value) Then totalMktValue = totalMktValue + wsStocks.Cells(i, 9).Value
         If IsNumeric(wsStocks.Cells(i, 10).Value) Then totalPnL = totalPnL + wsStocks.Cells(i, 10).Value
         If IsNumeric(wsStocks.Cells(i, 8).Value) Then totalCost = totalCost + wsStocks.Cells(i, 8).Value
@@ -1155,13 +1201,13 @@ Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As 
     Set wsOptions = wsDash.Parent.Sheets("Options")
     lastOptionRow = wsOptions.Cells(wsOptions.Rows.Count, 1).End(xlUp).Row
 
-    For i = 4 To lastOptionRow
+    For i = 3 To lastOptionRow
         ' Column M (13) is P&L on Options sheet
         If IsNumeric(wsOptions.Cells(i, 13).Value) Then totalPnL = totalPnL + wsOptions.Cells(i, 13).Value
     Next i
 
     ' ====== KPI SECTION (Top of Dashboard) ======
-    wsDash.Cells(1, 1).Value = "PORTFOLIO DASHBOARD"
+    wsDash.Cells(1, 1).Value = "PORTFOLIO DASHBOARD (v5.6.2)"
     wsDash.Cells(1, 1).Font.Bold = True
     wsDash.Cells(1, 1).Font.Size = 18
     wsDash.Cells(1, 1).Font.Color = COLOR_NAVY_BLUE
@@ -1223,7 +1269,7 @@ Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As 
     holdingCount = 0
 
     ' Count actual holdings (not cash)
-    For i = 4 To lastStockRow - 1
+    For i = 3 To lastStockRow - 1
         If wsStocks.Cells(i, 1).Value <> "" And _
            wsStocks.Cells(i, 1).Value <> "USD" And _
            wsStocks.Cells(i, 1).Value <> "JPY" And _
@@ -1239,7 +1285,7 @@ Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As 
         Dim idx As Long
         idx = 1
 
-        For i = 4 To lastStockRow - 1
+        For i = 3 To lastStockRow - 1
             If wsStocks.Cells(i, 1).Value <> "" And _
                wsStocks.Cells(i, 1).Value <> "USD" And _
                wsStocks.Cells(i, 1).Value <> "JPY" And _
@@ -1369,7 +1415,7 @@ Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As 
         ReDim pnlData(1 To holdingCount, 1 To 2)
         idx = 1
 
-        For i = 4 To lastStockRow - 1
+        For i = 3 To lastStockRow - 1
             If wsStocks.Cells(i, 1).Value <> "" And _
                wsStocks.Cells(i, 1).Value <> "USD" And _
                wsStocks.Cells(i, 1).Value <> "JPY" And _
@@ -1461,6 +1507,166 @@ Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As 
     wsDash.Columns("C").ColumnWidth = 18  ' YTD P&L needs more space
     wsDash.Columns("D:G").ColumnWidth = 12
 
+    ' Save performance history for trend tracking (v5.6)
+    Dim ytdReturnPct As Double
+    If totalCost > 0 Then
+        ytdReturnPct = totalPnL / totalCost
+    Else
+        ytdReturnPct = 0
+    End If
+    Call SavePerformanceHistory(Date, totalMktValue, totalPnL, ytdReturnPct, stockCount)
+
+    ' Create performance line chart if history exists (v5.6)
+    Call CreatePerformanceChart(wsDash)
+
     ' Move Dashboard to first position
     wsDash.Move Before:=wsDash.Parent.Sheets(1)
+End Sub
+
+' ====================================================================
+' PERFORMANCE HISTORY TRACKING (v5.6)
+' ====================================================================
+
+Private Sub SavePerformanceHistory(reportDate As Date, totalValue As Double, ytdPnL As Double, ytdReturn As Double, holdings As Long)
+    ' Saves daily performance metrics to a CSV file for historical tracking
+    ' This enables the performance line chart to show trends over time
+
+    Dim historyPath As String
+    Dim fso As Object
+    Dim ts As Object
+
+    On Error GoTo ErrorHandler
+
+    historyPath = "C:\Mobius Reports\Performance_History.csv"
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    ' Create file with headers if it doesn't exist
+    If Not fso.FileExists(historyPath) Then
+        Set ts = fso.CreateTextFile(historyPath, True)
+        ts.WriteLine "Date,Total Value,YTD P&L,YTD Return %,Holdings"
+        ts.Close
+    End If
+
+    ' Check if today's date already exists (avoid duplicates)
+    Dim existingData As String
+    Dim todayStr As String
+    todayStr = Format(reportDate, "yyyy-mm-dd")
+
+    Set ts = fso.OpenTextFile(historyPath, 1) ' 1 = ForReading
+    existingData = ts.ReadAll
+    ts.Close
+
+    If InStr(existingData, todayStr) > 0 Then
+        ' Today's data already exists, skip
+        Exit Sub
+    End If
+
+    ' Append today's data
+    Set ts = fso.OpenTextFile(historyPath, 8) ' 8 = ForAppending
+    ts.WriteLine todayStr & "," & Format(totalValue, "0.00") & "," & Format(ytdPnL, "0.00") & "," & Format(ytdReturn * 100, "0.00") & "," & holdings
+    ts.Close
+
+    Exit Sub
+
+ErrorHandler:
+    ' Silently fail - history tracking is optional
+    On Error GoTo 0
+End Sub
+
+Private Sub CreatePerformanceChart(wsDash As Worksheet)
+    ' Creates a line chart showing portfolio value over time
+    ' Only displays if 2+ data points exist in Performance_History.csv
+
+    Dim historyPath As String
+    Dim fso As Object
+    Dim ts As Object
+    Dim lines() As String
+    Dim i As Long
+    Dim dataCount As Long
+    Dim chartDataStart As Long
+
+    On Error GoTo ErrorHandler
+
+    historyPath = "C:\Mobius Reports\Performance_History.csv"
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    ' Check if history file exists
+    If Not fso.FileExists(historyPath) Then Exit Sub
+
+    ' Read the CSV file
+    Set ts = fso.OpenTextFile(historyPath, 1) ' 1 = ForReading
+    Dim fileContent As String
+    fileContent = ts.ReadAll
+    ts.Close
+
+    ' Split into lines (handle both Windows and Unix line endings)
+    fileContent = Replace(fileContent, vbCrLf, vbLf)  ' Normalize to Unix
+    lines = Split(fileContent, vbLf)
+    dataCount = UBound(lines) - 1  ' Subtract 1 for header row, ignore empty last line
+
+    ' Need at least 2 data points for a meaningful line chart
+    If dataCount < 2 Then Exit Sub
+
+    ' Find a spot for the performance chart data (after existing charts)
+    chartDataStart = 68  ' Below the P&L chart data
+
+    ' Write section header
+    wsDash.Cells(chartDataStart, 1).Value = "PERFORMANCE OVER TIME"
+    wsDash.Cells(chartDataStart, 1).Font.Bold = True
+    wsDash.Cells(chartDataStart, 1).Font.Size = 12
+    wsDash.Cells(chartDataStart, 1).Font.Color = COLOR_NAVY_BLUE
+
+    ' Write column headers
+    wsDash.Cells(chartDataStart + 1, 1).Value = "Date"
+    wsDash.Cells(chartDataStart + 1, 2).Value = "Portfolio Value"
+    wsDash.Range("A" & (chartDataStart + 1) & ":B" & (chartDataStart + 1)).Font.Bold = True
+
+    ' Parse and write data (skip header line)
+    Dim parts() As String
+    Dim rowIdx As Long
+    rowIdx = chartDataStart + 2
+
+    For i = 1 To UBound(lines)
+        If Trim(lines(i)) <> "" Then
+            parts = Split(lines(i), ",")
+            If UBound(parts) >= 1 Then
+                wsDash.Cells(rowIdx, 1).Value = CDate(parts(0))  ' Date
+                wsDash.Cells(rowIdx, 1).NumberFormat = "mm/dd"
+                wsDash.Cells(rowIdx, 2).Value = CDbl(parts(1))   ' Total Value
+                wsDash.Cells(rowIdx, 2).NumberFormat = "$#,##0"
+                rowIdx = rowIdx + 1
+            End If
+        End If
+    Next i
+
+    ' Create line chart - position BELOW P&L chart, to the right of performance data
+    Dim chartObj As ChartObject
+    Set chartObj = wsDash.ChartObjects.Add(Left:=420, Top:=980, Width:=400, Height:=220)
+    With chartObj.Chart
+        .ChartType = xlLine
+        .SetSourceData Source:=wsDash.Range("A" & (chartDataStart + 2) & ":B" & (rowIdx - 1))
+        .HasTitle = True
+        .ChartTitle.Text = "Portfolio Value Over Time"
+        .ChartTitle.Font.Size = 12
+        .ChartTitle.Font.Color = COLOR_NAVY_BLUE
+        .HasLegend = False
+
+        ' Format the line
+        With .SeriesCollection(1)
+            .Format.Line.Weight = 2
+            .Format.Line.ForeColor.RGB = COLOR_NAVY_BLUE
+        End With
+
+        ' Format axes
+        .Axes(xlCategory).TickLabels.NumberFormat = "mm/dd"
+        .Axes(xlValue).TickLabels.NumberFormat = "$#,##0,K"
+    End With
+
+    Exit Sub
+
+ErrorHandler:
+    ' Silently fail - chart is optional enhancement
+    On Error GoTo 0
 End Sub
