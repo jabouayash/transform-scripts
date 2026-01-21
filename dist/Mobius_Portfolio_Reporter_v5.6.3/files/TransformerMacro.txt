@@ -1,5 +1,5 @@
 ' ====================================================================
-' Portfolio Data Transformer - Version 5.6.3
+' Portfolio Data Transformer - Version 5.6.2
 ' ====================================================================
 ' WHAT'S NEW IN V5.6:
 '   - Narrower columns with text-wrapped headers for better readability
@@ -1179,16 +1179,12 @@ Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As 
 
     ' Calculate totals from Stocks sheet
     Dim posName As String
-    Dim actualLastRow As Long
     stockCount = 0
     totalMktValue = 0
     totalPnL = 0
     totalCost = 0
 
-    ' Find actual last row (includes cash positions added after lastStockRow)
-    actualLastRow = wsStocks.Cells(wsStocks.Rows.Count, 1).End(xlUp).Row
-
-    For i = 3 To actualLastRow
+    For i = 3 To lastStockRow - 1
         If IsNumeric(wsStocks.Cells(i, 9).Value) Then totalMktValue = totalMktValue + wsStocks.Cells(i, 9).Value
         If IsNumeric(wsStocks.Cells(i, 10).Value) Then totalPnL = totalPnL + wsStocks.Cells(i, 10).Value
         If IsNumeric(wsStocks.Cells(i, 8).Value) Then totalCost = totalCost + wsStocks.Cells(i, 8).Value
@@ -1206,13 +1202,12 @@ Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As 
     lastOptionRow = wsOptions.Cells(wsOptions.Rows.Count, 1).End(xlUp).Row
 
     For i = 3 To lastOptionRow
-        ' Column L (12) is Mkt Value, Column M (13) is P&L on Options sheet
-        If IsNumeric(wsOptions.Cells(i, 12).Value) Then totalMktValue = totalMktValue + wsOptions.Cells(i, 12).Value
+        ' Column M (13) is P&L on Options sheet
         If IsNumeric(wsOptions.Cells(i, 13).Value) Then totalPnL = totalPnL + wsOptions.Cells(i, 13).Value
     Next i
 
     ' ====== KPI SECTION (Top of Dashboard) ======
-    wsDash.Cells(1, 1).Value = "PORTFOLIO DASHBOARD (v5.6.3)"
+    wsDash.Cells(1, 1).Value = "PORTFOLIO DASHBOARD (v5.6.2)"
     wsDash.Cells(1, 1).Font.Bold = True
     wsDash.Cells(1, 1).Font.Size = 18
     wsDash.Cells(1, 1).Font.Color = COLOR_NAVY_BLUE
@@ -1374,7 +1369,6 @@ Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As 
         For i = 1 To pieCount
             wsDash.Cells(pieDataStart + 1 + i, 1).Value = holdings(i, 1)
             wsDash.Cells(pieDataStart + 1 + i, 2).Value = holdings(i, 2)
-            wsDash.Cells(pieDataStart + 1 + i, 2).NumberFormat = "$#,##0"
         Next i
 
         ' Calculate "Other" as Total - Top 5 (Fix 4: avoids floating-point rounding errors)
@@ -1384,7 +1378,6 @@ Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As 
             otherValue = totalMktValue - top5Sum
             wsDash.Cells(pieDataStart + 7, 1).Value = "Other"
             wsDash.Cells(pieDataStart + 7, 2).Value = otherValue
-            wsDash.Cells(pieDataStart + 7, 2).NumberFormat = "$#,##0"
             pieCount = 6
         End If
 

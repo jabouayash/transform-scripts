@@ -9,6 +9,14 @@ Format: [Semantic Versioning](https://semver.org/) - MAJOR.MINOR.PATCH
 
 ---
 
+## [5.6.3] - 2026-01-11
+### Fixed
+- Total Portfolio Value now includes cash positions (USD, CAD, etc.) that were missing
+- Total Portfolio Value now includes Options market value (was only including P&L)
+- Portfolio Allocation section now shows dollar signs on values
+
+---
+
 ## [5.6.2] - 2026-01-01
 ### Changed
 - Removed empty row 1 from Stocks and Options tabs (headers now start at row 1)
