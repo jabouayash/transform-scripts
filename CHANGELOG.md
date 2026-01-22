@@ -9,6 +9,28 @@ Format: [Semantic Versioning](https://semver.org/) - MAJOR.MINOR.PATCH
 
 ---
 
+## [5.7.0] - 2026-01-22
+### Added
+- New "Currencies" tab for cash positions (USD, CAD, JPY, EUR, GBP, AED, MAD, etc.)
+- New "Other" tab for admin/expense items (Accrued Dividends, Payables, Management Fees, etc.)
+
+### Changed
+- Removed Fund Performance Summary from Stocks tab
+- Stocks column A expanded to 45 width (names on single line, no text wrap)
+- Top Holdings bar chart now shows biggest holdings at top (reversed axis)
+- Gainers/Losers bar chart now shows gainers at top (reversed axis)
+- Gainers/Losers chart labels positioned at far left (xlTickLabelPositionLow) for readability
+- Gainers/Losers chart names truncated to 20 chars to prevent overflow
+- Performance chart now shows YTD Return % instead of portfolio value
+- Performance chart Y-axis uses 2% increments
+- YTD Return now uses official K94 value from non-custom file (not calculated P&L/MktValue)
+
+### Fixed
+- Total Portfolio Value now includes: Stocks + Options + Currencies + Other items
+- YTD Return now displays correct official fund return (was showing ~2x actual value)
+
+---
+
 ## [5.6.3] - 2026-01-11
 ### Fixed
 - Total Portfolio Value now includes cash positions (USD, CAD, etc.) that were missing
