@@ -1,0 +1,1672 @@
+' ====================================================================
+' Portfolio Data Transformer - Version 5.6.2
+' ====================================================================
+' WHAT'S NEW IN V5.6:
+'   - Narrower columns with text-wrapped headers for better readability
+'   - Performance history tracking (saves daily metrics to CSV)
+'   - Performance line chart (shows portfolio value over time)
+'
+' PREVIOUS (V5.5):
+'   - Dashboard YTD P&L includes Options P&L
+'   - Fixed Portfolio Allocation "Other" calculation
+'   - Options expiry dates formatted as MM/DD/YYYY
+'   - IFERROR wrapper on % Diff formula
+'   - Holdings count excludes cash positions
+'   - GOOG options look up GOOGL stock price
+'
+' PREVIOUS (V5.4):
+'   - Added Dashboard sheet with charts (appears first in workbook)
+'   - KPI summary: Total Portfolio Value, YTD P&L, YTD Return, Holdings count
+'   - Bar chart: Top 10 holdings by market value
+'   - Pie chart: Portfolio allocation (Top 5 + Other)
+'   - Bar chart: YTD P&L by position (top gainers and losers)
+'
+' PREVIOUS (V5.3):
+'   - REMOVED Bloomberg dependency - all data now comes from NAV reports
+'   - Stock prices use "Today USD" from source file (no BDP formulas)
+'   - Option underlying prices looked up from stock prices dictionary
+'   - No Bloomberg Terminal required to run or view reports
+'
+' PREVIOUS (V5.2):
+'   - Removed blank column A (data starts in column A now)
+'   - Reordered columns: Name, Ticker, Portfolio Wgt, % Diff, Daily Chg, Unit Cost, Current Px, etc.
+'   - Removed currency symbols from cells (numbers only, headers show USD)
+'   - Narrower Name column (30 width)
+'   - Rounded prices to nearest dollar
+'   - Options: Removed Yield % column, added ($) to P&L header
+'
+' PREVIOUS (V5.1):
+'   - FX conversion for non-USD tickers (JP, LN, etc.)
+'   - Japanese stocks now display prices in USD
+'
+' PREVIOUS (V5):
+'   - Professional formatting matching input file styling
+'   - Navy blue sub-headers with white text
+'   - Alternating row colors (white/light gray zebra striping)
+'   - Consistent font colors and borders
+'
+' PREVIOUS (V4):
+'   - Integration with Outlook email monitor (automatic triggering)
+'   - Reads YTD Fund Return from non-custom "Gain And Exposure" file (K94)
+'   - Output saved to C:\Mobius Reports\Transformed\ folder
+'   - Can be run manually or triggered by Outlook VBA
+'
+' DATA SOURCES:
+'   1. Primary: Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_[DATE].XLSX
+'      - Contains: Position details, P&L, weights, # of shares
+'   2. Performance: Gain And Exposure_MOBIUS EMERGING OPPORTUNITIES FUND LP_[DATE].XLSX
+'      - Contains: K94 = YTD Fund Return (e.g., 3.74%)
+'   3. Optional: DailyRor file for MTD/additional metrics
+'
+' USAGE (Manual):
+'   1. Open the Custom NAV file
+'   2. Run TransformBloombergData macro
+'   3. Script finds matching non-custom file automatically
+'
+' USAGE (Automatic via Outlook):
+'   1. Outlook monitor detects both emails
+'   2. Saves attachments to C:\Mobius Reports\Incoming\
+'   3. Calls SetDailyFilePath with the non-custom file path
+'   4. Calls TransformBloombergData
+'
+' ====================================================================
+
+Option Explicit
+
+' ============================================
+' CONFIGURATION
+' ============================================
+Private Const OUTPUT_FOLDER As String = "C:\Mobius Reports\Transformed\"
+Private Const INCOMING_FOLDER As String = "C:\Mobius Reports\Incoming\"
+
+' ============================================
+' COLOR SCHEME (matching input file styling)
+' ============================================
+' Navy blue for sub-headers: #003366 = RGB(0, 51, 102)
+Private Const COLOR_NAVY_BLUE As Long = 6697728    ' RGB(0, 51, 102) as Long
+' White for sub-header text and alternating rows
+Private Const COLOR_WHITE As Long = 16777215       ' RGB(255, 255, 255)
+' Light gray for alternating rows: #F2F2F2
+Private Const COLOR_LIGHT_GRAY As Long = 15921906  ' RGB(242, 242, 242)
+' Dark gray for data text: #404040
+Private Const COLOR_DARK_GRAY As Long = 4210752    ' RGB(64, 64, 64)
+' Gray for header text: #595959
+Private Const COLOR_HEADER_GRAY As Long = 5855577  ' RGB(89, 89, 89)
+
+' ============================================
+' GLOBAL VARIABLES
+' ============================================
+Dim stockPositions As Object      ' Dictionary: ticker -> shares
+Dim stockPrices As Object         ' Dictionary: ticker -> current price (for options underlying)
+Dim ytdReturn As Double           ' YTD return from DailyRor
+Dim mtdReturn As Double           ' MTD return from DailyRor
+Dim totalEquity As Double         ' Total portfolio value
+Dim navPerShare As Double         ' NAV per share
+Dim performanceDataFound As Boolean
+Dim dailyFilePath As String       ' Path to non-custom file (set by Outlook or found automatically)
+Dim ytdFundReturn As Double       ' YTD Fund Return from K94 of non-custom file
+Dim ytdFundReturnFound As Boolean ' Flag if K94 was found
+
+' ============================================
+' OUTLOOK INTEGRATION - Called by Outlook VBA
+' ============================================
+Public Sub SetDailyFilePath(filePath As String)
+    ' Called by Outlook VBA to set the path to the non-custom file
+    dailyFilePath = filePath
+End Sub
+
+' ============================================
+' MANUAL RUN - Use this when testing without Outlook
+' ============================================
+Public Sub ManualRun()
+    ' This is the entry point for manual testing.
+    ' It finds the Custom NAV file in the Incoming folder and processes it.
+
+    Dim customFile As String
+    Dim wbSource As Workbook
+
+    ' Look for Custom NAV file in Incoming folder
+    customFile = Dir(INCOMING_FOLDER & "Gain And Exposure_Custom_*.XLSX")
+
+    If customFile = "" Then
+        MsgBox "No Custom NAV file found in:" & vbCrLf & INCOMING_FOLDER & vbCrLf & vbCrLf & _
+               "Please ensure the file is named:" & vbCrLf & _
+               "Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_MMDDYYYY.XLSX", _
+               vbExclamation, "File Not Found"
+        Exit Sub
+    End If
+
+    ' Check if file is already open
+    Dim alreadyOpen As Boolean
+    alreadyOpen = False
+
+    Dim wb As Workbook
+    For Each wb In Workbooks
+        If wb.Name = customFile Then
+            Set wbSource = wb
+            alreadyOpen = True
+            Exit For
+        End If
+    Next wb
+
+    ' If not open, open it
+    If Not alreadyOpen Then
+        On Error Resume Next
+        Set wbSource = Workbooks.Open(Filename:=INCOMING_FOLDER & customFile, ReadOnly:=True, UpdateLinks:=False)
+        On Error GoTo 0
+
+        If wbSource Is Nothing Then
+            MsgBox "Could not open the file. It may be in Protected View." & vbCrLf & vbCrLf & _
+                   "Please manually open this file first and click 'Enable Editing':" & vbCrLf & _
+                   INCOMING_FOLDER & customFile & vbCrLf & vbCrLf & _
+                   "Then run ManualRun again.", vbExclamation, "Protected View"
+            Exit Sub
+        End If
+    End If
+
+    wbSource.Sheets(1).Activate
+
+    ' Run the transformation
+    Call TransformBloombergData
+
+    ' Close the source file without saving (only if we opened it)
+    If Not alreadyOpen Then
+        wbSource.Close SaveChanges:=False
+    End If
+End Sub
+
+' ====================================================================
+' MAIN TRANSFORMATION PROCEDURE
+' ====================================================================
+Sub TransformBloombergData()
+    Dim wsSource As Worksheet
+    Dim wsStocks As Worksheet
+    Dim wsOptions As Worksheet
+    Dim wbOutput As Workbook
+    Dim lastRow As Long
+    Dim i As Long
+    Dim productName As String
+    Dim outputPath As String
+    Dim todayDate As String
+    Dim sourceFolder As String
+    Dim reportDate As String
+
+    On Error GoTo ErrorHandler
+
+    ' Initialize
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    Set stockPositions = CreateObject("Scripting.Dictionary")
+    Set stockPrices = CreateObject("Scripting.Dictionary")
+    performanceDataFound = False
+    ytdFundReturnFound = False
+    ytdReturn = 0
+    mtdReturn = 0
+    totalEquity = 0
+    navPerShare = 0
+    ytdFundReturn = 0
+
+    ' Get the source worksheet (Custom file should be active)
+    Set wsSource = ActiveSheet
+    sourceFolder = ActiveWorkbook.Path & "\"
+
+    ' Extract date from filename for finding matching files
+    reportDate = ExtractDateFromFilename(ActiveWorkbook.Name)
+
+    ' Try to find and read the non-custom file for K94 (YTD Fund Return)
+    Call ReadYTDFundReturn(sourceFolder, reportDate)
+
+    ' Try to find and read DailyRor file for additional metrics
+    Call ReadDailyRorData(sourceFolder)
+
+    ' Find last row with data
+    lastRow = wsSource.Cells(wsSource.Rows.Count, "A").End(xlUp).Row
+
+    ' First pass: Build stock positions and prices dictionaries
+    For i = 6 To lastRow
+        productName = Trim(CStr(wsSource.Cells(i, 1).Value))
+        If productName <> "" And productName <> "USD" And Not IsOption(productName) Then
+            Dim ticker As String
+            Dim shares As Variant
+            Dim currentPrice As Variant
+            ticker = Trim(CStr(wsSource.Cells(i, 2).Value))
+            shares = wsSource.Cells(i, 12).Value
+            currentPrice = wsSource.Cells(i, 6).Value  ' Today USD price
+
+            Dim baseTicker As String
+            baseTicker = ExtractBaseTicker(ticker)
+
+            If baseTicker <> "" Then
+                If IsNumeric(shares) Then stockPositions(baseTicker) = shares
+                If IsNumeric(currentPrice) Then stockPrices(baseTicker) = currentPrice
+            End If
+        End If
+    Next i
+
+    ' Create new workbook for output
+    Set wbOutput = Workbooks.Add
+    wbOutput.Sheets(1).Name = "Stocks"
+    Set wsStocks = wbOutput.Sheets("Stocks")
+
+    Set wsOptions = wbOutput.Sheets.Add(After:=wsStocks)
+    wsOptions.Name = "Options"
+
+    ' Setup headers
+    Call SetupStocksHeaders(wsStocks)
+    Call SetupOptionsHeaders(wsOptions)
+
+    ' Process rows
+    Dim stockRow As Long
+    Dim putRow As Long
+    Dim callRow As Long
+    Dim optionPutRows As Long
+
+    stockRow = 3      ' Data starts at row 3 (after headers in rows 1-2)
+    putRow = 4        ' Options data starts at row 4 (after headers in rows 1-3)
+    optionPutRows = 0
+
+    ' Count puts first
+    For i = 6 To lastRow
+        productName = Trim(CStr(wsSource.Cells(i, 1).Value))
+        If productName <> "" And productName <> "USD" Then
+            If IsPutOption(productName) Then
+                optionPutRows = optionPutRows + 1
+            End If
+        End If
+    Next i
+
+    ' Set starting row for calls
+    callRow = putRow + optionPutRows + 2
+
+    ' Add CALLS header (column A, new structure I-M)
+    wsOptions.Cells(callRow - 1, 1).Value = "CALLS"
+    wsOptions.Cells(callRow - 1, 1).Font.Bold = True
+    wsOptions.Cells(callRow - 1, 1).Font.Size = 12
+    wsOptions.Range("I2:M2").Copy wsOptions.Range("I" & (callRow - 1))
+    wsOptions.Range("A3:M3").Copy wsOptions.Range("A" & callRow)
+    callRow = callRow + 1
+
+    putRow = 4        ' Reset to row 4 for options data
+
+    ' Process all rows
+    For i = 6 To lastRow
+        productName = Trim(CStr(wsSource.Cells(i, 1).Value))
+
+        If productName <> "" And productName <> "USD" Then
+            If IsOption(productName) Then
+                If IsPutOption(productName) Then
+                    Call ProcessOption(wsSource, i, wsOptions, putRow, "PUT")
+                    putRow = putRow + 1
+                ElseIf IsCallOption(productName) Then
+                    Call ProcessOption(wsSource, i, wsOptions, callRow, "CALL")
+                    callRow = callRow + 1
+                End If
+            Else
+                Call ProcessStock(wsSource, i, wsStocks, stockRow)
+                stockRow = stockRow + 1
+            End If
+        End If
+    Next i
+
+    ' Add cash positions
+    Call AddCashPositions(wsSource, wsStocks, stockRow, lastRow)
+
+    ' Add bottom totals section
+    Call AddBottomTotals(wsStocks, stockRow + 4)
+
+    ' Format sheets
+    Call FormatStocksSheet(wsStocks, stockRow)
+    Call FormatOptionsSheet(wsOptions, putRow, callRow)
+
+    ' Create Dashboard sheet with charts
+    Dim wsDashboard As Worksheet
+    Set wsDashboard = wbOutput.Sheets.Add(After:=wsOptions)
+    wsDashboard.Name = "Dashboard"
+    Call CreateDashboard(wsDashboard, wsStocks, stockRow)
+
+    ' Determine output path
+    ' Use OUTPUT_FOLDER if it exists, otherwise use source folder
+    Dim savePath As String
+    If Dir(OUTPUT_FOLDER, vbDirectory) <> "" Then
+        savePath = OUTPUT_FOLDER
+    Else
+        savePath = sourceFolder
+    End If
+
+    todayDate = Format(Date, "DD MMMM YYYY")
+    outputPath = savePath & "Transformed_Portfolio_" & todayDate & ".xlsx"
+
+    If Dir(outputPath) <> "" Then
+        outputPath = savePath & "Transformed_Portfolio_" & Format(Now, "YYYYMMDD_HHMMSS") & ".xlsx"
+    End If
+
+    wbOutput.SaveAs outputPath
+
+    ' Cleanup
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+
+    ' Summary message
+    Dim msg As String
+    msg = "Transformation complete!" & vbCrLf & vbCrLf
+    msg = msg & "File saved: " & outputPath & vbCrLf & vbCrLf
+    msg = msg & "Stocks processed: " & (stockRow - 3) & vbCrLf
+    msg = msg & "Options processed: " & (putRow - 4 + callRow - (putRow + optionPutRows + 3)) & vbCrLf & vbCrLf
+
+    msg = msg & "Performance Data:" & vbCrLf
+    If ytdFundReturnFound Then
+        msg = msg & "  YTD Fund Return (K94): " & Format(ytdFundReturn, "0.00%") & vbCrLf
+    Else
+        msg = msg & "  YTD Fund Return: Not found (non-custom file missing)" & vbCrLf
+    End If
+
+    If performanceDataFound Then
+        msg = msg & "  MTD Return (DailyRor): " & Format(mtdReturn, "0.00%") & vbCrLf
+        msg = msg & "  Total Equity: " & Format(totalEquity, "$#,##0")
+    End If
+
+    MsgBox msg, vbInformation, "Portfolio Data Transformer v5.5"
+
+    Exit Sub
+
+ErrorHandler:
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    MsgBox "Error: " & Err.Description & vbCrLf & "Line: " & Erl, vbCritical
+End Sub
+
+' ====================================================================
+' READ YTD FUND RETURN FROM NON-CUSTOM FILE (K94)
+' ====================================================================
+Sub ReadYTDFundReturn(folderPath As String, reportDate As String)
+    Dim fileName As String
+    Dim filePath As String
+    Dim wbDaily As Workbook
+    Dim wsDaily As Worksheet
+    Dim k94Value As Variant
+
+    On Error GoTo NotFound
+
+    ' If Outlook already set the path, use it
+    If dailyFilePath <> "" And Dir(dailyFilePath) <> "" Then
+        filePath = dailyFilePath
+    Else
+        ' Try to find the non-custom file in the same folder
+        ' Pattern: Gain And Exposure_MOBIUS EMERGING OPPORTUNITIES FUND LP_MMDDYYYY.XLSX
+        ' (Note: NO "Custom_" in the name)
+
+        fileName = Dir(folderPath & "Gain And Exposure_MOBIUS EMERGING OPPORTUNITIES FUND LP_" & reportDate & ".XLSX")
+
+        If fileName = "" Then
+            ' Try incoming folder
+            fileName = Dir(INCOMING_FOLDER & "Gain And Exposure_MOBIUS EMERGING OPPORTUNITIES FUND LP_" & reportDate & ".XLSX")
+            If fileName <> "" Then
+                filePath = INCOMING_FOLDER & fileName
+            End If
+        Else
+            filePath = folderPath & fileName
+        End If
+    End If
+
+    If filePath = "" Or Dir(filePath) = "" Then
+        ytdFundReturnFound = False
+        Exit Sub
+    End If
+
+    ' Open the non-custom file
+    Set wbDaily = Workbooks.Open(filePath, ReadOnly:=True, UpdateLinks:=False)
+    Set wsDaily = wbDaily.Sheets(1)
+
+    ' Read K94 - YTD ROR
+    k94Value = wsDaily.Cells(94, 11).Value  ' Column K = 11
+
+    If IsNumeric(k94Value) Then
+        ytdFundReturn = CDbl(k94Value)
+        ytdFundReturnFound = True
+    Else
+        ytdFundReturnFound = False
+    End If
+
+    ' Also grab total equity from H94 if available
+    If IsNumeric(wsDaily.Cells(94, 8).Value) Then
+        totalEquity = CDbl(wsDaily.Cells(94, 8).Value)
+    End If
+
+    wbDaily.Close SaveChanges:=False
+
+    Exit Sub
+
+NotFound:
+    ytdFundReturnFound = False
+    On Error GoTo 0
+End Sub
+
+' ====================================================================
+' EXTRACT DATE FROM FILENAME
+' ====================================================================
+Function ExtractDateFromFilename(fileName As String) As String
+    ' Extract MMDDYYYY from filename like:
+    ' "Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP_11262025.XLSX"
+
+    Dim pos As Long
+    Dim dateStr As String
+
+    ' Find the underscore before the date
+    pos = InStrRev(fileName, "_")
+
+    If pos > 0 Then
+        ' Extract 8 characters after the underscore (MMDDYYYY)
+        dateStr = Mid(fileName, pos + 1, 8)
+
+        If IsNumeric(dateStr) And Len(dateStr) = 8 Then
+            ExtractDateFromFilename = dateStr
+        Else
+            ExtractDateFromFilename = ""
+        End If
+    Else
+        ExtractDateFromFilename = ""
+    End If
+End Function
+
+' ====================================================================
+' READ DAILYROR FILE FOR ADDITIONAL PERFORMANCE DATA
+' ====================================================================
+Sub ReadDailyRorData(folderPath As String)
+    Dim fileName As String
+    Dim filePath As String
+    Dim wbRor As Workbook
+    Dim wsRor As Worksheet
+    Dim i As Long
+
+    On Error GoTo NotFound
+
+    ' Look for DailyRor file (1003_DailyRor, not 1003_A)
+    fileName = Dir(folderPath & "*_1003_DailyRor_*.xls")
+
+    If fileName = "" Then
+        ' Try incoming folder
+        fileName = Dir(INCOMING_FOLDER & "*_1003_DailyRor_*.xls")
+        If fileName <> "" Then
+            filePath = INCOMING_FOLDER & fileName
+        End If
+    Else
+        filePath = folderPath & fileName
+    End If
+
+    If fileName = "" Then
+        ' Try alternative pattern
+        fileName = Dir(folderPath & "*DailyRor*.xls")
+        If fileName <> "" Then
+            filePath = folderPath & fileName
+        End If
+    End If
+
+    If fileName = "" Then
+        performanceDataFound = False
+        Exit Sub
+    End If
+
+    ' Make sure we don't get the _A version
+    If InStr(fileName, "_A_DailyRor") > 0 Then
+        fileName = Dir()
+        Do While fileName <> ""
+            If InStr(fileName, "_A_DailyRor") = 0 And InStr(fileName, "DailyRor") > 0 Then
+                Exit Do
+            End If
+            fileName = Dir()
+        Loop
+    End If
+
+    If fileName = "" Then
+        performanceDataFound = False
+        Exit Sub
+    End If
+
+    If filePath = "" Then filePath = folderPath & fileName
+
+    ' Open DailyRor workbook
+    Set wbRor = Workbooks.Open(filePath, ReadOnly:=True, UpdateLinks:=False)
+    Set wsRor = wbRor.Sheets(1)
+
+    ' Find data row (Row 13 or 14)
+    For i = 13 To 20
+        If IsNumeric(wsRor.Cells(i, 2).Value) And wsRor.Cells(i, 2).Value > 0 Then
+            If totalEquity = 0 Then totalEquity = wsRor.Cells(i, 2).Value
+            mtdReturn = wsRor.Cells(i, 4).Value
+            If Not ytdFundReturnFound Then ytdReturn = wsRor.Cells(i, 6).Value
+            navPerShare = wsRor.Cells(i, 9).Value
+        End If
+    Next i
+
+    wbRor.Close SaveChanges:=False
+    performanceDataFound = True
+
+    Exit Sub
+
+NotFound:
+    performanceDataFound = False
+    On Error GoTo 0
+End Sub
+
+' ====================================================================
+' HELPER FUNCTIONS
+' ====================================================================
+
+Function IsOption(productName As String) As Boolean
+    IsOption = (InStr(1, productName, " PUT ", vbTextCompare) > 0) Or _
+               (InStr(1, productName, " CALL ", vbTextCompare) > 0)
+End Function
+
+Function IsPutOption(productName As String) As Boolean
+    IsPutOption = InStr(1, productName, " PUT ", vbTextCompare) > 0
+End Function
+
+Function IsCallOption(productName As String) As Boolean
+    IsCallOption = InStr(1, productName, " CALL ", vbTextCompare) > 0
+End Function
+
+Function ExtractBaseTicker(fullTicker As String) As String
+    Dim spacePos As Long
+    fullTicker = Trim(fullTicker)
+    spacePos = InStr(fullTicker, " ")
+    If spacePos > 0 Then
+        ExtractBaseTicker = Left(fullTicker, spacePos - 1)
+    Else
+        ExtractBaseTicker = fullTicker
+    End If
+End Function
+
+Function ExtractStrike(productName As String) As String
+    Dim pos As Long
+    Dim optionType As String
+
+    If IsPutOption(productName) Then
+        optionType = "PUT"
+    Else
+        optionType = "CALL"
+    End If
+
+    pos = InStr(1, productName, optionType, vbTextCompare)
+    If pos > 0 Then
+        ExtractStrike = Trim(Mid(productName, pos + Len(optionType)))
+    Else
+        ExtractStrike = ""
+    End If
+End Function
+
+Function ExtractExpiry(productName As String) As String
+    Dim parts() As String
+    Dim i As Long
+
+    parts = Split(productName, " ")
+
+    For i = LBound(parts) To UBound(parts)
+        If InStr(parts(i), "/") > 0 Then
+            ExtractExpiry = parts(i)
+            Exit Function
+        End If
+    Next i
+
+    ExtractExpiry = ""
+End Function
+
+Function ExtractTickerFromOptionName(productName As String) As String
+    Dim spacePos As Long
+    spacePos = InStr(productName, " ")
+    If spacePos > 0 Then
+        ExtractTickerFromOptionName = Left(productName, spacePos - 1)
+    Else
+        ExtractTickerFromOptionName = productName
+    End If
+End Function
+
+Function GetUnderlyingShares(optionTicker As String) As Variant
+    Dim baseTicker As String
+    baseTicker = ExtractTickerFromOptionName(optionTicker)
+
+    If stockPositions.Exists(baseTicker) Then
+        GetUnderlyingShares = stockPositions(baseTicker)
+    Else
+        GetUnderlyingShares = 0
+    End If
+End Function
+
+Function GetUnderlyingPrice(optionTicker As String) As Variant
+    Dim baseTicker As String
+    baseTicker = ExtractTickerFromOptionName(optionTicker)
+
+    ' Fix 5: Handle common ticker aliases (GOOG options → GOOGL stock)
+    If Not stockPrices.Exists(baseTicker) Then
+        Select Case UCase(baseTicker)
+            Case "GOOG": baseTicker = "GOOGL"
+            Case "BRK.A": baseTicker = "BRK/A"
+            Case "BRK.B": baseTicker = "BRK/B"
+        End Select
+    End If
+
+    If stockPrices.Exists(baseTicker) Then
+        GetUnderlyingPrice = stockPrices(baseTicker)
+    Else
+        GetUnderlyingPrice = ""
+    End If
+End Function
+
+' ====================================================================
+' SETUP HEADERS
+' ====================================================================
+
+Sub SetupStocksHeaders(ws As Worksheet)
+    ' Row 1: Column headers (bold gray text)
+    ' ORDER: Name, Ticker, Portfolio Wgt, % Diff, Daily Chg %, Unit Cost, Current Px, Total Cost, Mkt Value, P&L, Attribution
+    ws.Cells(1, 1).Value = "Name"
+    ws.Cells(1, 2).Value = "Ticker"
+    ws.Cells(1, 3).Value = "Portfolio Wgt"
+    ws.Cells(1, 4).Value = "% Diff (Cost)"
+    ws.Cells(1, 5).Value = "Daily Chg %"
+    ws.Cells(1, 6).Value = "Unit Cost"
+    ws.Cells(1, 7).Value = "Current Px"
+    ws.Cells(1, 8).Value = "Total Cost"
+    ws.Cells(1, 9).Value = "Mkt Value"
+    ws.Cells(1, 10).Value = "P&L"
+    ws.Cells(1, 11).Value = "Attribution"
+
+    ' Row 2: Sub-headers (navy blue background, white text)
+    ws.Cells(2, 3).Value = "%"
+    ws.Cells(2, 4).Value = "%"
+    ws.Cells(2, 5).Value = "%"
+    ws.Cells(2, 6).Value = "USD"
+    ws.Cells(2, 7).Value = "USD"
+    ws.Cells(2, 8).Value = "USD"
+    ws.Cells(2, 9).Value = "USD"
+    ws.Cells(2, 10).Value = "YTD"
+    ws.Cells(2, 11).Value = "%"
+
+    ' Format header row (row 1) - bold gray text with text wrap
+    With ws.Range("A1:K1")
+        .Font.Bold = True
+        .Font.Color = COLOR_HEADER_GRAY
+        .HorizontalAlignment = xlCenter
+        .WrapText = True
+    End With
+    ws.Rows(1).RowHeight = 30  ' Allow 2 lines for wrapped text
+
+    ' Format sub-header row (row 2) - navy blue background, white text
+    With ws.Range("A2:K2")
+        .Font.Bold = True
+        .Font.Color = COLOR_WHITE
+        .Interior.Color = COLOR_NAVY_BLUE
+        .HorizontalAlignment = xlCenter
+        .WrapText = True
+    End With
+    ws.Rows(2).RowHeight = 25
+End Sub
+
+Sub SetupOptionsHeaders(ws As Worksheet)
+    ' Row 1: Section title "PUTS"
+    ws.Cells(1, 1).Value = "PUTS"
+    ws.Cells(1, 1).Font.Bold = True
+    ws.Cells(1, 1).Font.Size = 12
+    ws.Cells(1, 1).Font.Color = COLOR_HEADER_GRAY
+
+    ' Row 2: Column group headers (navy blue background, white text)
+    ws.Cells(2, 9).Value = "Unit Cost"
+    ws.Cells(2, 10).Value = "Total Cost"
+    ws.Cells(2, 11).Value = "Current Px"
+    ws.Cells(2, 12).Value = "Mkt Value"
+    ws.Cells(2, 13).Value = "P&L ($)"
+
+    ' Row 3: Sub-headers with units
+    ws.Cells(3, 1).Value = "Name"
+    ws.Cells(3, 2).Value = "Quantity"
+    ws.Cells(3, 3).Value = "Underlying Qty"
+    ws.Cells(3, 4).Value = "% Hedged"
+    ws.Cells(3, 5).Value = "Strike Px"
+    ws.Cells(3, 6).Value = "Underlying Px"
+    ws.Cells(3, 7).Value = "% Moneyness"
+    ws.Cells(3, 8).Value = "Expiry"
+    ws.Cells(3, 9).Value = "USD"
+    ws.Cells(3, 10).Value = "USD"
+    ws.Cells(3, 11).Value = "USD"
+    ws.Cells(3, 12).Value = "USD"
+    ws.Cells(3, 13).Value = "YTD"
+
+    ' Format row 2 - navy blue background, white text for column group headers
+    With ws.Range("I2:M2")
+        .Font.Bold = True
+        .Font.Color = COLOR_WHITE
+        .Interior.Color = COLOR_NAVY_BLUE
+        .HorizontalAlignment = xlCenter
+        .WrapText = True
+    End With
+
+    ' Format row 3 - navy blue background, white text for sub-headers with text wrap
+    With ws.Range("A3:M3")
+        .Font.Bold = True
+        .Font.Color = COLOR_WHITE
+        .Interior.Color = COLOR_NAVY_BLUE
+        .HorizontalAlignment = xlCenter
+        .WrapText = True
+    End With
+    ws.Rows(2).RowHeight = 25
+    ws.Rows(3).RowHeight = 30  ' Allow 2 lines for wrapped text
+End Sub
+
+' ====================================================================
+' PROCESS DATA ROWS
+' ====================================================================
+
+Sub ProcessStock(wsSource As Worksheet, sourceRow As Long, wsTarget As Worksheet, targetRow As Long)
+    ' COLUMN ORDER (starting at A):
+    ' A=Name, B=Ticker, C=Portfolio Wgt, D=% Diff, E=Daily Chg, F=Unit Cost, G=Current Px, H=Total Cost, I=Mkt Value, J=P&L, K=Attribution
+    '
+    ' SOURCE COLUMNS (from NAV report):
+    ' 1=Name, 2=Ticker, 4=Portfolio Wgt, 5=Unit Cost, 6=Today USD, 7=Daily Chg, 8=Attribution, 9=Total Cost, 10=Mkt Value, 11=P&L
+
+    wsTarget.Cells(targetRow, 1).Value = wsSource.Cells(sourceRow, 1).Value   ' A: Name
+    wsTarget.Cells(targetRow, 2).Value = wsSource.Cells(sourceRow, 2).Value   ' B: Ticker
+    wsTarget.Cells(targetRow, 3).Value = wsSource.Cells(sourceRow, 4).Value   ' C: Portfolio Wgt
+    wsTarget.Cells(targetRow, 5).Value = wsSource.Cells(sourceRow, 7).Value   ' E: Daily Chg %
+    wsTarget.Cells(targetRow, 6).Value = wsSource.Cells(sourceRow, 5).Value   ' F: Unit Cost
+    wsTarget.Cells(targetRow, 7).Value = wsSource.Cells(sourceRow, 6).Value   ' G: Current Px (from NAV report)
+    wsTarget.Cells(targetRow, 8).Value = wsSource.Cells(sourceRow, 9).Value   ' H: Total Cost
+    wsTarget.Cells(targetRow, 9).Value = wsSource.Cells(sourceRow, 10).Value  ' I: Mkt Value (from NAV report)
+    wsTarget.Cells(targetRow, 10).Value = wsSource.Cells(sourceRow, 11).Value ' J: P&L
+    wsTarget.Cells(targetRow, 11).Value = wsSource.Cells(sourceRow, 8).Value  ' K: Attribution
+
+    ' D: % Diff (Cost) - calculated from Current Px vs Unit Cost (Fix 2: IFERROR for divide-by-zero)
+    wsTarget.Cells(targetRow, 4).Formula = "=IFERROR((G" & targetRow & "-F" & targetRow & ")/F" & targetRow & ",0)"
+End Sub
+
+' ====================================================================
+' CURRENCY HELPER - Returns FX currency code for non-USD tickers
+' ====================================================================
+Function GetFXCurrency(ticker As String) As String
+    Dim suffix As String
+    Dim spacePos As Long
+
+    ' Extract the exchange suffix (e.g., "JP" from "2644 JP")
+    spacePos = InStr(ticker, " ")
+    If spacePos > 0 Then
+        suffix = UCase(Trim(Mid(ticker, spacePos + 1)))
+    Else
+        GetFXCurrency = ""
+        Exit Function
+    End If
+
+    ' Map exchange suffix to currency
+    Select Case suffix
+        Case "JP"   ' Japan
+            GetFXCurrency = "JPY"
+        Case "LN"   ' London
+            GetFXCurrency = "GBP"
+        Case "GY", "GR"  ' Germany
+            GetFXCurrency = "EUR"
+        Case "FP"   ' France
+            GetFXCurrency = "EUR"
+        Case "IM"   ' Italy
+            GetFXCurrency = "EUR"
+        Case "SM"   ' Spain
+            GetFXCurrency = "EUR"
+        Case "NA"   ' Netherlands
+            GetFXCurrency = "EUR"
+        Case "AV"   ' Austria
+            GetFXCurrency = "EUR"
+        Case "SW"   ' Switzerland
+            GetFXCurrency = "CHF"
+        Case "CN"   ' Canada
+            GetFXCurrency = "CAD"
+        Case "AU"   ' Australia
+            GetFXCurrency = "AUD"
+        Case "HK"   ' Hong Kong
+            GetFXCurrency = "HKD"
+        Case "SP"   ' Singapore
+            GetFXCurrency = "SGD"
+        Case "KS"   ' Korea
+            GetFXCurrency = "KRW"
+        Case "TT"   ' Taiwan
+            GetFXCurrency = "TWD"
+        Case "US", "UN", "UA", "UQ", "UW"  ' US exchanges
+            GetFXCurrency = ""  ' No conversion needed
+        Case Else
+            GetFXCurrency = ""  ' Default: assume USD or unknown
+    End Select
+End Function
+
+Sub ProcessOption(wsSource As Worksheet, sourceRow As Long, wsTarget As Worksheet, targetRow As Long, optionType As String)
+    ' COLUMN ORDER (starting at A, NO Yield column):
+    ' A=Name, B=Quantity, C=Underlying Qty, D=% Hedged, E=Strike Px, F=Underlying Px, G=% Moneyness, H=Expiry, I=Unit Cost, J=Total Cost, K=Current Px, L=Mkt Value, M=P&L
+
+    Dim productName As String
+    Dim quantity As Variant
+    Dim underlyingQty As Variant
+    Dim underlyingPx As Variant
+    Dim strike As String
+    Dim expiry As String
+    Dim baseTicker As String
+
+    productName = wsSource.Cells(sourceRow, 1).Value
+    quantity = wsSource.Cells(sourceRow, 12).Value
+    strike = ExtractStrike(productName)
+    expiry = ExtractExpiry(productName)
+    baseTicker = ExtractTickerFromOptionName(productName)
+
+    underlyingQty = GetUnderlyingShares(baseTicker)
+    underlyingPx = GetUnderlyingPrice(productName)
+
+    wsTarget.Cells(targetRow, 1).Value = productName           ' A: Name
+    wsTarget.Cells(targetRow, 2).Value = quantity              ' B: Quantity
+    wsTarget.Cells(targetRow, 3).Value = underlyingQty         ' C: Underlying Qty
+
+    ' D: % Hedged
+    If underlyingQty <> 0 Then
+        If optionType = "PUT" Then
+            wsTarget.Cells(targetRow, 4).Formula = "=$B" & targetRow & "*100/$C" & targetRow
+        Else
+            wsTarget.Cells(targetRow, 4).Formula = "=-$B" & targetRow & "*100/$C" & targetRow
+        End If
+    Else
+        wsTarget.Cells(targetRow, 4).Value = "N/A"
+    End If
+
+    ' E: Strike Px
+    If IsNumeric(strike) Then
+        wsTarget.Cells(targetRow, 5).Value = CDbl(strike)
+    Else
+        wsTarget.Cells(targetRow, 5).Value = strike
+    End If
+
+    ' F: Underlying Px (from stock prices dictionary)
+    If IsNumeric(underlyingPx) And underlyingPx <> "" Then
+        wsTarget.Cells(targetRow, 6).Value = underlyingPx
+    Else
+        wsTarget.Cells(targetRow, 6).Value = ""
+    End If
+
+    ' G: % Moneyness (only if we have underlying price)
+    If IsNumeric(underlyingPx) And underlyingPx <> "" Then
+        wsTarget.Cells(targetRow, 7).Formula = "=(F" & targetRow & "-E" & targetRow & ")/E" & targetRow
+    Else
+        wsTarget.Cells(targetRow, 7).Value = ""
+    End If
+
+    ' H: Expiry - convert to date and format immediately (Fix 3)
+    If expiry <> "" Then
+        On Error Resume Next
+        wsTarget.Cells(targetRow, 8).Value = CDate(expiry)
+        wsTarget.Cells(targetRow, 8).NumberFormat = "mm/dd/yyyy"  ' Apply format immediately
+        If Err.Number <> 0 Then
+            wsTarget.Cells(targetRow, 8).Value = expiry  ' Fall back to string if not a valid date
+            Err.Clear
+        End If
+        On Error GoTo 0
+    Else
+        wsTarget.Cells(targetRow, 8).Value = ""
+    End If
+    wsTarget.Cells(targetRow, 9).Value = wsSource.Cells(sourceRow, 5).Value   ' I: Unit Cost
+    wsTarget.Cells(targetRow, 10).Value = wsSource.Cells(sourceRow, 9).Value  ' J: Total Cost
+    wsTarget.Cells(targetRow, 11).Value = wsSource.Cells(sourceRow, 6).Value  ' K: Current Px
+    wsTarget.Cells(targetRow, 12).Value = wsSource.Cells(sourceRow, 10).Value ' L: Mkt Value
+    wsTarget.Cells(targetRow, 13).Value = wsSource.Cells(sourceRow, 11).Value ' M: P&L YTD
+End Sub
+
+Sub AddCashPositions(wsSource As Worksheet, wsTarget As Worksheet, startRow As Long, lastRow As Long)
+    Dim i As Long
+    Dim targetRow As Long
+    Dim productName As String
+
+    targetRow = startRow + 2
+
+    For i = 6 To lastRow
+        productName = Trim(CStr(wsSource.Cells(i, 1).Value))
+        If productName = "USD" Or productName = "JPY" Or productName = "CAD" Or productName = "EUR" Or productName = "GBP" Then
+            wsTarget.Cells(targetRow, 1).Value = productName   ' A: Name (was B)
+            wsTarget.Cells(targetRow, 9).Value = wsSource.Cells(i, 12).Value  ' I: Mkt Value (position value)
+            targetRow = targetRow + 1
+        End If
+    Next i
+End Sub
+
+' ====================================================================
+' ADD BOTTOM TOTALS SECTION - UPDATED FOR V4
+' ====================================================================
+
+Sub AddBottomTotals(ws As Worksheet, startRow As Long)
+    Dim r As Long
+    r = startRow + 1
+
+    ' Section header (now column A instead of B)
+    ws.Cells(r, 1).Value = "FUND PERFORMANCE SUMMARY"
+    ws.Cells(r, 1).Font.Bold = True
+    ws.Cells(r, 1).Font.Size = 12
+    r = r + 2
+
+    ' Total Portfolio Value
+    ws.Cells(r, 1).Value = "Total Portfolio Value:"
+    ws.Cells(r, 1).Font.Bold = True
+    If totalEquity > 0 Then
+        ws.Cells(r, 3).Value = totalEquity
+        ws.Cells(r, 3).NumberFormat = "#,##0"  ' No $ symbol
+    Else
+        ws.Cells(r, 3).Value = "(Not available)"
+    End If
+    r = r + 1
+
+    ' NAV Per Share
+    ws.Cells(r, 1).Value = "NAV Per Share:"
+    ws.Cells(r, 1).Font.Bold = True
+    If navPerShare > 0 Then
+        ws.Cells(r, 3).Value = navPerShare
+        ws.Cells(r, 3).NumberFormat = "#,##0.00"  ' No $ symbol
+    Else
+        ws.Cells(r, 3).Value = "(Not available)"
+    End If
+    r = r + 1
+
+    ' Inception Date
+    ws.Cells(r, 1).Value = "Fund Inception Date:"
+    ws.Cells(r, 1).Font.Bold = True
+    ws.Cells(r, 3).Value = "March 2025"
+    r = r + 1
+
+    ' YTD Fund Return (from K94 - PRIMARY SOURCE)
+    ws.Cells(r, 1).Value = "YTD Fund Return:"
+    ws.Cells(r, 1).Font.Bold = True
+    If ytdFundReturnFound Then
+        ws.Cells(r, 3).Value = ytdFundReturn
+        ws.Cells(r, 3).NumberFormat = "0.00%"
+        ws.Cells(r, 4).Value = "(from Gain & Exposure report)"
+        ws.Cells(r, 4).Font.Italic = True
+        ws.Cells(r, 4).Font.Color = RGB(128, 128, 128)
+    ElseIf performanceDataFound And ytdReturn <> 0 Then
+        ws.Cells(r, 3).Value = ytdReturn
+        ws.Cells(r, 3).NumberFormat = "0.00%"
+        ws.Cells(r, 4).Value = "(from DailyRor)"
+        ws.Cells(r, 4).Font.Italic = True
+        ws.Cells(r, 4).Font.Color = RGB(128, 128, 128)
+    Else
+        ws.Cells(r, 3).Value = "(Not available)"
+    End If
+    r = r + 1
+
+    ' MTD Net Return
+    ws.Cells(r, 1).Value = "MTD Net Return:"
+    ws.Cells(r, 1).Font.Bold = True
+    If performanceDataFound And mtdReturn <> 0 Then
+        ws.Cells(r, 3).Value = mtdReturn
+        ws.Cells(r, 3).NumberFormat = "0.00%"
+    Else
+        ws.Cells(r, 3).Value = "(Not available)"
+    End If
+    r = r + 1
+
+    ' Data Source Note
+    r = r + 1
+    ws.Cells(r, 1).Value = "Report generated: " & Format(Now, "MMMM D, YYYY h:mm AM/PM")
+    ws.Cells(r, 1).Font.Italic = True
+    ws.Cells(r, 1).Font.Color = RGB(128, 128, 128)
+End Sub
+
+' ====================================================================
+' FORMATTING
+' ====================================================================
+
+Sub FormatStocksSheet(ws As Worksheet, lastRow As Long)
+    Dim i As Long
+
+    If lastRow > 3 Then
+        ' Number formats - NO currency symbols, rounded to nearest dollar
+        ' A=Name, B=Ticker, C=Portfolio Wgt, D=% Diff, E=Daily Chg, F=Unit Cost, G=Current Px, H=Total Cost, I=Mkt Value, J=P&L, K=Attribution
+        ws.Range("C3:C" & lastRow).NumberFormat = "0.00%"      ' Portfolio Wgt
+        ws.Range("D3:D" & lastRow).NumberFormat = "0.00%"      ' % Diff
+        ws.Range("E3:E" & lastRow).NumberFormat = "0.00%"      ' Daily Chg
+        ws.Range("F3:G" & lastRow).NumberFormat = "#,##0"      ' Unit Cost, Current Px (rounded, no $)
+        ws.Range("H3:I" & lastRow).NumberFormat = "#,##0"      ' Total Cost, Mkt Value (rounded, no $)
+        ws.Range("J3:J" & lastRow).NumberFormat = "#,##0"      ' P&L (no $)
+        ws.Range("K3:K" & lastRow).NumberFormat = "0.00%"      ' Attribution
+
+        ' Apply alternating row colors (zebra striping) and font color
+        For i = 3 To lastRow
+            With ws.Range("A" & i & ":K" & i)
+                .Font.Color = COLOR_DARK_GRAY
+                If (i Mod 2) = 1 Then
+                    .Interior.Color = COLOR_WHITE
+                Else
+                    .Interior.Color = COLOR_LIGHT_GRAY
+                End If
+            End With
+        Next i
+    End If
+
+    ' Set column widths - narrower with wrapped text (v5.6)
+    ws.Columns("A").ColumnWidth = 25      ' Name (narrow, text wraps)
+    ws.Columns("B").ColumnWidth = 8       ' Ticker (text wraps if needed)
+    ws.Columns("C").ColumnWidth = 10      ' Portfolio Wgt
+    ws.Columns("D").ColumnWidth = 10      ' % Diff
+    ws.Columns("E").ColumnWidth = 10      ' Daily Chg
+    ws.Columns("F").ColumnWidth = 10      ' Unit Cost
+    ws.Columns("G").ColumnWidth = 10      ' Current Px
+    ws.Columns("H").ColumnWidth = 12      ' Total Cost
+    ws.Columns("I").ColumnWidth = 12      ' Mkt Value
+    ws.Columns("J").ColumnWidth = 12      ' P&L
+    ws.Columns("K").ColumnWidth = 10      ' Attribution
+
+    ' Enable text wrap on Name and Ticker columns so long text wraps to new line
+    ws.Columns("A:B").WrapText = True
+
+    ' Add borders
+    If lastRow > 3 Then
+        With ws.Range("A1:K" & lastRow).Borders
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .Color = RGB(200, 200, 200)
+        End With
+    End If
+End Sub
+
+Sub FormatOptionsSheet(ws As Worksheet, lastPutRow As Long, lastCallRow As Long)
+    Dim lastRow As Long
+    Dim i As Long
+    Dim callHeaderRow As Long
+
+    lastRow = Application.Max(lastPutRow, lastCallRow)
+
+    ' Number formats - NO currency symbols, new column structure (A-M)
+    ' A=Name, B=Quantity, C=Underlying Qty, D=% Hedged, E=Strike Px, F=Underlying Px, G=% Moneyness, H=Expiry, I=Unit Cost, J=Total Cost, K=Current Px, L=Mkt Value, M=P&L
+    ws.Range("B:B").NumberFormat = "#,##0"         ' Quantity
+    ws.Range("C:C").NumberFormat = "#,##0"         ' Underlying Qty
+    ws.Range("D:D").NumberFormat = "0.00%"         ' % Hedged
+    ws.Range("E:E").NumberFormat = "#,##0"         ' Strike Px (no $)
+    ws.Range("F:F").NumberFormat = "#,##0"         ' Underlying Px (no $)
+    ws.Range("G:G").NumberFormat = "0.00%"         ' % Moneyness
+    ws.Range("H:H").NumberFormat = "mm/dd/yyyy"   ' Expiry (Fix 3: format as date)
+    ' Also explicitly format expiry data rows to ensure date display
+    If lastPutRow > 3 Then ws.Range("H4:H" & lastPutRow).NumberFormat = "mm/dd/yyyy"
+    If lastCallRow > lastPutRow + 2 Then ws.Range("H" & (lastPutRow + 3) & ":H" & lastCallRow).NumberFormat = "mm/dd/yyyy"
+    ws.Range("I:L").NumberFormat = "#,##0"         ' Unit Cost, Total Cost, Current Px, Mkt Value (no $)
+    ws.Range("M:M").NumberFormat = "#,##0"         ' P&L (no $)
+
+    ' Find CALLS header row (it's 2 rows after the last PUT)
+    callHeaderRow = lastPutRow + 2
+
+    ' Apply alternating row colors for PUTS section (starting row 4)
+    For i = 4 To lastPutRow
+        With ws.Range("A" & i & ":M" & i)
+            .Font.Color = COLOR_DARK_GRAY
+            If (i Mod 2) = 1 Then
+                .Interior.Color = COLOR_WHITE
+            Else
+                .Interior.Color = COLOR_LIGHT_GRAY
+            End If
+        End With
+    Next i
+
+    ' Format CALLS header row with navy blue
+    If callHeaderRow > 4 Then
+        ' CALLS title
+        ws.Cells(callHeaderRow - 1, 1).Font.Color = COLOR_HEADER_GRAY
+
+        ' CALLS sub-header row - navy blue background
+        With ws.Range("A" & callHeaderRow & ":M" & callHeaderRow)
+            .Font.Bold = True
+            .Font.Color = COLOR_WHITE
+            .Interior.Color = COLOR_NAVY_BLUE
+            .HorizontalAlignment = xlCenter
+        End With
+
+        ' Format column group headers for CALLS section
+        With ws.Range("I" & (callHeaderRow - 1) & ":M" & (callHeaderRow - 1))
+            .Font.Bold = True
+            .Font.Color = COLOR_WHITE
+            .Interior.Color = COLOR_NAVY_BLUE
+            .HorizontalAlignment = xlCenter
+        End With
+
+        ' Apply alternating row colors for CALLS section
+        For i = callHeaderRow + 1 To lastCallRow
+            With ws.Range("A" & i & ":M" & i)
+                .Font.Color = COLOR_DARK_GRAY
+                If (i Mod 2) = 0 Then
+                    .Interior.Color = COLOR_WHITE
+                Else
+                    .Interior.Color = COLOR_LIGHT_GRAY
+                End If
+            End With
+        Next i
+    End If
+
+    ' Set column widths - narrower with wrapped text (v5.6)
+    ws.Columns("A").ColumnWidth = 25      ' Name (narrow, text wraps)
+    ws.Columns("B").ColumnWidth = 9       ' Quantity
+    ws.Columns("C").ColumnWidth = 10      ' Underlying Qty
+    ws.Columns("D").ColumnWidth = 9       ' % Hedged
+    ws.Columns("E").ColumnWidth = 9       ' Strike Px
+    ws.Columns("F").ColumnWidth = 10      ' Underlying Px
+    ws.Columns("G").ColumnWidth = 10      ' % Moneyness
+    ws.Columns("H").ColumnWidth = 11      ' Expiry
+    ws.Columns("I").ColumnWidth = 10      ' Unit Cost
+    ws.Columns("J").ColumnWidth = 10      ' Total Cost
+    ws.Columns("K").ColumnWidth = 10      ' Current Px
+    ws.Columns("L").ColumnWidth = 10      ' Mkt Value
+    ws.Columns("M").ColumnWidth = 10      ' P&L
+
+    ' Enable text wrap on Name column so long option names wrap to new line
+    ws.Columns("A").WrapText = True
+
+    ' Add borders
+    If lastRow > 3 Then
+        With ws.Range("A1:M" & lastRow).Borders
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .Color = RGB(200, 200, 200)
+        End With
+    End If
+End Sub
+
+' ====================================================================
+' DASHBOARD WITH CHARTS
+' ====================================================================
+
+Sub CreateDashboard(wsDash As Worksheet, wsStocks As Worksheet, lastStockRow As Long)
+    On Error Resume Next  ' Continue on chart errors
+
+    Dim chartObj As ChartObject
+    Dim dataRange As Range
+    Dim i As Long
+    Dim totalMktValue As Double
+    Dim totalPnL As Double
+    Dim totalCost As Double
+    Dim stockCount As Long
+
+    ' Calculate totals from Stocks sheet
+    Dim posName As String
+    stockCount = 0
+    totalMktValue = 0
+    totalPnL = 0
+    totalCost = 0
+
+    For i = 3 To lastStockRow - 1
+        If IsNumeric(wsStocks.Cells(i, 9).Value) Then totalMktValue = totalMktValue + wsStocks.Cells(i, 9).Value
+        If IsNumeric(wsStocks.Cells(i, 10).Value) Then totalPnL = totalPnL + wsStocks.Cells(i, 10).Value
+        If IsNumeric(wsStocks.Cells(i, 8).Value) Then totalCost = totalCost + wsStocks.Cells(i, 8).Value
+        ' Count only non-cash positions (Fix 6)
+        posName = wsStocks.Cells(i, 1).Value
+        If posName <> "USD" And posName <> "JPY" And posName <> "CAD" And posName <> "EUR" And posName <> "GBP" Then
+            stockCount = stockCount + 1
+        End If
+    Next i
+
+    ' Add Options P&L to total (Fix 1)
+    Dim wsOptions As Worksheet
+    Dim lastOptionRow As Long
+    Set wsOptions = wsDash.Parent.Sheets("Options")
+    lastOptionRow = wsOptions.Cells(wsOptions.Rows.Count, 1).End(xlUp).Row
+
+    For i = 3 To lastOptionRow
+        ' Column M (13) is P&L on Options sheet
+        If IsNumeric(wsOptions.Cells(i, 13).Value) Then totalPnL = totalPnL + wsOptions.Cells(i, 13).Value
+    Next i
+
+    ' ====== KPI SECTION (Top of Dashboard) ======
+    wsDash.Cells(1, 1).Value = "PORTFOLIO DASHBOARD (v5.6.2)"
+    wsDash.Cells(1, 1).Font.Bold = True
+    wsDash.Cells(1, 1).Font.Size = 18
+    wsDash.Cells(1, 1).Font.Color = COLOR_NAVY_BLUE
+
+    wsDash.Cells(2, 1).Value = "Report Date: " & Format(Date, "MMMM D, YYYY")
+    wsDash.Cells(2, 1).Font.Italic = True
+    wsDash.Cells(2, 1).Font.Color = COLOR_HEADER_GRAY
+
+    ' KPI Cards Row
+    wsDash.Cells(4, 1).Value = "Total Portfolio Value"
+    wsDash.Cells(5, 1).Value = totalMktValue
+    wsDash.Cells(5, 1).NumberFormat = "$#,##0"
+    wsDash.Cells(5, 1).Font.Bold = True
+    wsDash.Cells(5, 1).Font.Size = 16
+
+    wsDash.Cells(4, 3).Value = "YTD P&L"
+    wsDash.Cells(5, 3).Value = totalPnL
+    wsDash.Cells(5, 3).NumberFormat = "$#,##0"
+    wsDash.Cells(5, 3).Font.Bold = True
+    wsDash.Cells(5, 3).Font.Size = 16
+    If totalPnL >= 0 Then
+        wsDash.Cells(5, 3).Font.Color = RGB(0, 128, 0)  ' Green
+    Else
+        wsDash.Cells(5, 3).Font.Color = RGB(192, 0, 0)  ' Red
+    End If
+
+    wsDash.Cells(4, 5).Value = "YTD Return"
+    If totalCost > 0 Then
+        wsDash.Cells(5, 5).Value = totalPnL / totalCost
+    Else
+        wsDash.Cells(5, 5).Value = 0
+    End If
+    wsDash.Cells(5, 5).NumberFormat = "0.00%"
+    wsDash.Cells(5, 5).Font.Bold = True
+    wsDash.Cells(5, 5).Font.Size = 16
+
+    wsDash.Cells(4, 7).Value = "Holdings"
+    wsDash.Cells(5, 7).Value = stockCount
+    wsDash.Cells(5, 7).Font.Bold = True
+    wsDash.Cells(5, 7).Font.Size = 16
+
+    ' Format KPI headers
+    wsDash.Range("A4,C4,E4,G4").Font.Color = COLOR_HEADER_GRAY
+    wsDash.Range("A4,C4,E4,G4").Font.Size = 10
+
+    ' ====== CHART 1: Top 10 Holdings by Market Value (Bar Chart) ======
+    ' First, create a sorted data table for the chart (hidden area)
+    Dim chartDataStart As Long
+    chartDataStart = 8
+
+    wsDash.Cells(chartDataStart, 1).Value = "TOP 10 HOLDINGS BY VALUE"
+    wsDash.Cells(chartDataStart, 1).Font.Bold = True
+    wsDash.Cells(chartDataStart, 1).Font.Size = 12
+    wsDash.Cells(chartDataStart, 1).Font.Color = COLOR_NAVY_BLUE
+
+    ' Copy and sort top 10 holdings data
+    Dim holdings() As Variant
+    Dim holdingCount As Long
+    holdingCount = 0
+
+    ' Count actual holdings (not cash)
+    For i = 3 To lastStockRow - 1
+        If wsStocks.Cells(i, 1).Value <> "" And _
+           wsStocks.Cells(i, 1).Value <> "USD" And _
+           wsStocks.Cells(i, 1).Value <> "JPY" And _
+           wsStocks.Cells(i, 1).Value <> "CAD" And _
+           wsStocks.Cells(i, 1).Value <> "EUR" And _
+           wsStocks.Cells(i, 1).Value <> "GBP" Then
+            holdingCount = holdingCount + 1
+        End If
+    Next i
+
+    If holdingCount > 0 Then
+        ReDim holdings(1 To holdingCount, 1 To 2)
+        Dim idx As Long
+        idx = 1
+
+        For i = 3 To lastStockRow - 1
+            If wsStocks.Cells(i, 1).Value <> "" And _
+               wsStocks.Cells(i, 1).Value <> "USD" And _
+               wsStocks.Cells(i, 1).Value <> "JPY" And _
+               wsStocks.Cells(i, 1).Value <> "CAD" And _
+               wsStocks.Cells(i, 1).Value <> "EUR" And _
+               wsStocks.Cells(i, 1).Value <> "GBP" Then
+                holdings(idx, 1) = wsStocks.Cells(i, 1).Value  ' Name
+                If IsNumeric(wsStocks.Cells(i, 9).Value) Then
+                    holdings(idx, 2) = wsStocks.Cells(i, 9).Value  ' Mkt Value
+                Else
+                    holdings(idx, 2) = 0
+                End If
+                idx = idx + 1
+            End If
+        Next i
+
+        ' Simple bubble sort by market value (descending)
+        Dim j As Long
+        Dim tempName As Variant
+        Dim tempValue As Variant
+        For i = 1 To holdingCount - 1
+            For j = i + 1 To holdingCount
+                If holdings(j, 2) > holdings(i, 2) Then
+                    tempName = holdings(i, 1)
+                    tempValue = holdings(i, 2)
+                    holdings(i, 1) = holdings(j, 1)
+                    holdings(i, 2) = holdings(j, 2)
+                    holdings(j, 1) = tempName
+                    holdings(j, 2) = tempValue
+                End If
+            Next j
+        Next i
+
+        ' Write top 10 to dashboard
+        Dim topCount As Long
+        topCount = Application.Min(10, holdingCount)
+
+        wsDash.Cells(chartDataStart + 1, 1).Value = "Name"
+        wsDash.Cells(chartDataStart + 1, 2).Value = "Market Value"
+        wsDash.Range("A" & (chartDataStart + 1) & ":B" & (chartDataStart + 1)).Font.Bold = True
+
+        For i = 1 To topCount
+            wsDash.Cells(chartDataStart + 1 + i, 1).Value = holdings(i, 1)
+            wsDash.Cells(chartDataStart + 1 + i, 2).Value = holdings(i, 2)
+            wsDash.Cells(chartDataStart + 1 + i, 2).NumberFormat = "$#,##0"
+        Next i
+
+        ' Create bar chart for top holdings
+        Set chartObj = wsDash.ChartObjects.Add(Left:=250, Top:=120, Width:=400, Height:=250)
+        With chartObj.Chart
+            .ChartType = xlBarClustered
+            .SetSourceData Source:=wsDash.Range("A" & (chartDataStart + 2) & ":B" & (chartDataStart + 1 + topCount))
+            .HasTitle = True
+            .ChartTitle.Text = "Top Holdings by Market Value"
+            .ChartTitle.Font.Size = 12
+            .ChartTitle.Font.Color = COLOR_NAVY_BLUE
+            .HasLegend = False
+        End With
+    End If
+
+    ' ====== CHART 2: Portfolio Allocation Pie Chart ======
+    Dim pieDataStart As Long
+    pieDataStart = chartDataStart + 15
+
+    wsDash.Cells(pieDataStart, 1).Value = "PORTFOLIO ALLOCATION"
+    wsDash.Cells(pieDataStart, 1).Font.Bold = True
+    wsDash.Cells(pieDataStart, 1).Font.Size = 12
+    wsDash.Cells(pieDataStart, 1).Font.Color = COLOR_NAVY_BLUE
+
+    If holdingCount > 0 Then
+        ' Use top 5 + "Other" for pie chart
+        Dim pieCount As Long
+        pieCount = Application.Min(5, holdingCount)
+        Dim otherValue As Double
+        otherValue = 0
+
+        wsDash.Cells(pieDataStart + 1, 1).Value = "Category"
+        wsDash.Cells(pieDataStart + 1, 2).Value = "Value"
+        wsDash.Range("A" & (pieDataStart + 1) & ":B" & (pieDataStart + 1)).Font.Bold = True
+
+        For i = 1 To pieCount
+            wsDash.Cells(pieDataStart + 1 + i, 1).Value = holdings(i, 1)
+            wsDash.Cells(pieDataStart + 1 + i, 2).Value = holdings(i, 2)
+        Next i
+
+        ' Calculate "Other" as Total - Top 5 (Fix 4: avoids floating-point rounding errors)
+        If holdingCount > 5 Then
+            Dim top5Sum As Double
+            top5Sum = holdings(1, 2) + holdings(2, 2) + holdings(3, 2) + holdings(4, 2) + holdings(5, 2)
+            otherValue = totalMktValue - top5Sum
+            wsDash.Cells(pieDataStart + 7, 1).Value = "Other"
+            wsDash.Cells(pieDataStart + 7, 2).Value = otherValue
+            pieCount = 6
+        End If
+
+        ' Create pie chart
+        Set chartObj = wsDash.ChartObjects.Add(Left:=250, Top:=400, Width:=350, Height:=250)
+        With chartObj.Chart
+            .ChartType = xlPie
+            .SetSourceData Source:=wsDash.Range("A" & (pieDataStart + 2) & ":B" & (pieDataStart + 1 + pieCount))
+            .HasTitle = True
+            .ChartTitle.Text = "Portfolio Allocation (Top 5 + Other)"
+            .ChartTitle.Font.Size = 12
+            .ChartTitle.Font.Color = COLOR_NAVY_BLUE
+            .HasLegend = True
+            .Legend.Position = xlLegendPositionRight
+
+            ' Add data labels
+            .SeriesCollection(1).HasDataLabels = True
+            .SeriesCollection(1).DataLabels.ShowPercentage = True
+            .SeriesCollection(1).DataLabels.ShowValue = False
+        End With
+    End If
+
+    ' ====== CHART 3: YTD P&L by Position (Top Gainers/Losers) ======
+    Dim pnlDataStart As Long
+    pnlDataStart = pieDataStart + 12
+
+    wsDash.Cells(pnlDataStart, 1).Value = "YTD P&L BY POSITION"
+    wsDash.Cells(pnlDataStart, 1).Font.Bold = True
+    wsDash.Cells(pnlDataStart, 1).Font.Size = 12
+    wsDash.Cells(pnlDataStart, 1).Font.Color = COLOR_NAVY_BLUE
+
+    If holdingCount > 0 Then
+        ' Create array for P&L sorting
+        Dim pnlData() As Variant
+        ReDim pnlData(1 To holdingCount, 1 To 2)
+        idx = 1
+
+        For i = 3 To lastStockRow - 1
+            If wsStocks.Cells(i, 1).Value <> "" And _
+               wsStocks.Cells(i, 1).Value <> "USD" And _
+               wsStocks.Cells(i, 1).Value <> "JPY" And _
+               wsStocks.Cells(i, 1).Value <> "CAD" And _
+               wsStocks.Cells(i, 1).Value <> "EUR" And _
+               wsStocks.Cells(i, 1).Value <> "GBP" Then
+                pnlData(idx, 1) = wsStocks.Cells(i, 1).Value  ' Name
+                If IsNumeric(wsStocks.Cells(i, 10).Value) Then
+                    pnlData(idx, 2) = wsStocks.Cells(i, 10).Value  ' P&L
+                Else
+                    pnlData(idx, 2) = 0
+                End If
+                idx = idx + 1
+            End If
+        Next i
+
+        ' Sort by P&L (descending)
+        For i = 1 To holdingCount - 1
+            For j = i + 1 To holdingCount
+                If pnlData(j, 2) > pnlData(i, 2) Then
+                    tempName = pnlData(i, 1)
+                    tempValue = pnlData(i, 2)
+                    pnlData(i, 1) = pnlData(j, 1)
+                    pnlData(i, 2) = pnlData(j, 2)
+                    pnlData(j, 1) = tempName
+                    pnlData(j, 2) = tempValue
+                End If
+            Next j
+        Next i
+
+        ' Write top 5 gainers and top 5 losers
+        wsDash.Cells(pnlDataStart + 1, 1).Value = "Position"
+        wsDash.Cells(pnlDataStart + 1, 2).Value = "YTD P&L"
+        wsDash.Range("A" & (pnlDataStart + 1) & ":B" & (pnlDataStart + 1)).Font.Bold = True
+
+        Dim pnlDisplayCount As Long
+        pnlDisplayCount = Application.Min(10, holdingCount)
+
+        ' Show top gainers (first 5) and losers (last 5)
+        Dim displayIdx As Long
+        displayIdx = 1
+
+        ' Top 5 gainers
+        For i = 1 To Application.Min(5, holdingCount)
+            wsDash.Cells(pnlDataStart + 1 + displayIdx, 1).Value = pnlData(i, 1)
+            wsDash.Cells(pnlDataStart + 1 + displayIdx, 2).Value = pnlData(i, 2)
+            wsDash.Cells(pnlDataStart + 1 + displayIdx, 2).NumberFormat = "$#,##0"
+            If pnlData(i, 2) >= 0 Then
+                wsDash.Cells(pnlDataStart + 1 + displayIdx, 2).Font.Color = RGB(0, 128, 0)
+            Else
+                wsDash.Cells(pnlDataStart + 1 + displayIdx, 2).Font.Color = RGB(192, 0, 0)
+            End If
+            displayIdx = displayIdx + 1
+        Next i
+
+        ' Bottom 5 losers (if more than 5 holdings)
+        If holdingCount > 5 Then
+            For i = holdingCount - 4 To holdingCount
+                If i > 5 Then  ' Don't duplicate
+                    wsDash.Cells(pnlDataStart + 1 + displayIdx, 1).Value = pnlData(i, 1)
+                    wsDash.Cells(pnlDataStart + 1 + displayIdx, 2).Value = pnlData(i, 2)
+                    wsDash.Cells(pnlDataStart + 1 + displayIdx, 2).NumberFormat = "$#,##0"
+                    If pnlData(i, 2) >= 0 Then
+                        wsDash.Cells(pnlDataStart + 1 + displayIdx, 2).Font.Color = RGB(0, 128, 0)
+                    Else
+                        wsDash.Cells(pnlDataStart + 1 + displayIdx, 2).Font.Color = RGB(192, 0, 0)
+                    End If
+                    displayIdx = displayIdx + 1
+                End If
+            Next i
+        End If
+
+        ' Create bar chart for P&L
+        Set chartObj = wsDash.ChartObjects.Add(Left:=250, Top:=680, Width:=400, Height:=250)
+        With chartObj.Chart
+            .ChartType = xlBarClustered
+            .SetSourceData Source:=wsDash.Range("A" & (pnlDataStart + 2) & ":B" & (pnlDataStart + displayIdx))
+            .HasTitle = True
+            .ChartTitle.Text = "YTD P&L: Top Gainers & Losers"
+            .ChartTitle.Font.Size = 12
+            .ChartTitle.Font.Color = COLOR_NAVY_BLUE
+            .HasLegend = False
+        End With
+    End If
+
+    ' Format column widths
+    wsDash.Columns("A").ColumnWidth = 40
+    wsDash.Columns("B").ColumnWidth = 15
+    wsDash.Columns("C").ColumnWidth = 18  ' YTD P&L needs more space
+    wsDash.Columns("D:G").ColumnWidth = 12
+
+    ' Save performance history for trend tracking (v5.6)
+    Dim ytdReturnPct As Double
+    If totalCost > 0 Then
+        ytdReturnPct = totalPnL / totalCost
+    Else
+        ytdReturnPct = 0
+    End If
+    Call SavePerformanceHistory(Date, totalMktValue, totalPnL, ytdReturnPct, stockCount)
+
+    ' Create performance line chart if history exists (v5.6)
+    Call CreatePerformanceChart(wsDash)
+
+    ' Move Dashboard to first position
+    wsDash.Move Before:=wsDash.Parent.Sheets(1)
+End Sub
+
+' ====================================================================
+' PERFORMANCE HISTORY TRACKING (v5.6)
+' ====================================================================
+
+Private Sub SavePerformanceHistory(reportDate As Date, totalValue As Double, ytdPnL As Double, ytdReturn As Double, holdings As Long)
+    ' Saves daily performance metrics to a CSV file for historical tracking
+    ' This enables the performance line chart to show trends over time
+
+    Dim historyPath As String
+    Dim fso As Object
+    Dim ts As Object
+
+    On Error GoTo ErrorHandler
+
+    historyPath = "C:\Mobius Reports\Performance_History.csv"
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    ' Create file with headers if it doesn't exist
+    If Not fso.FileExists(historyPath) Then
+        Set ts = fso.CreateTextFile(historyPath, True)
+        ts.WriteLine "Date,Total Value,YTD P&L,YTD Return %,Holdings"
+        ts.Close
+    End If
+
+    ' Check if today's date already exists (avoid duplicates)
+    Dim existingData As String
+    Dim todayStr As String
+    todayStr = Format(reportDate, "yyyy-mm-dd")
+
+    Set ts = fso.OpenTextFile(historyPath, 1) ' 1 = ForReading
+    existingData = ts.ReadAll
+    ts.Close
+
+    If InStr(existingData, todayStr) > 0 Then
+        ' Today's data already exists, skip
+        Exit Sub
+    End If
+
+    ' Append today's data
+    Set ts = fso.OpenTextFile(historyPath, 8) ' 8 = ForAppending
+    ts.WriteLine todayStr & "," & Format(totalValue, "0.00") & "," & Format(ytdPnL, "0.00") & "," & Format(ytdReturn * 100, "0.00") & "," & holdings
+    ts.Close
+
+    Exit Sub
+
+ErrorHandler:
+    ' Silently fail - history tracking is optional
+    On Error GoTo 0
+End Sub
+
+Private Sub CreatePerformanceChart(wsDash As Worksheet)
+    ' Creates a line chart showing portfolio value over time
+    ' Only displays if 2+ data points exist in Performance_History.csv
+
+    Dim historyPath As String
+    Dim fso As Object
+    Dim ts As Object
+    Dim lines() As String
+    Dim i As Long
+    Dim dataCount As Long
+    Dim chartDataStart As Long
+
+    On Error GoTo ErrorHandler
+
+    historyPath = "C:\Mobius Reports\Performance_History.csv"
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    ' Check if history file exists
+    If Not fso.FileExists(historyPath) Then Exit Sub
+
+    ' Read the CSV file
+    Set ts = fso.OpenTextFile(historyPath, 1) ' 1 = ForReading
+    Dim fileContent As String
+    fileContent = ts.ReadAll
+    ts.Close
+
+    ' Split into lines (handle both Windows and Unix line endings)
+    fileContent = Replace(fileContent, vbCrLf, vbLf)  ' Normalize to Unix
+    lines = Split(fileContent, vbLf)
+    dataCount = UBound(lines) - 1  ' Subtract 1 for header row, ignore empty last line
+
+    ' Need at least 2 data points for a meaningful line chart
+    If dataCount < 2 Then Exit Sub
+
+    ' Find a spot for the performance chart data (after existing charts)
+    chartDataStart = 68  ' Below the P&L chart data
+
+    ' Write section header
+    wsDash.Cells(chartDataStart, 1).Value = "PERFORMANCE OVER TIME"
+    wsDash.Cells(chartDataStart, 1).Font.Bold = True
+    wsDash.Cells(chartDataStart, 1).Font.Size = 12
+    wsDash.Cells(chartDataStart, 1).Font.Color = COLOR_NAVY_BLUE
+
+    ' Write column headers
+    wsDash.Cells(chartDataStart + 1, 1).Value = "Date"
+    wsDash.Cells(chartDataStart + 1, 2).Value = "Portfolio Value"
+    wsDash.Range("A" & (chartDataStart + 1) & ":B" & (chartDataStart + 1)).Font.Bold = True
+
+    ' Parse and write data (skip header line)
+    Dim parts() As String
+    Dim rowIdx As Long
+    rowIdx = chartDataStart + 2
+
+    For i = 1 To UBound(lines)
+        If Trim(lines(i)) <> "" Then
+            parts = Split(lines(i), ",")
+            If UBound(parts) >= 1 Then
+                wsDash.Cells(rowIdx, 1).Value = CDate(parts(0))  ' Date
+                wsDash.Cells(rowIdx, 1).NumberFormat = "mm/dd"
+                wsDash.Cells(rowIdx, 2).Value = CDbl(parts(1))   ' Total Value
+                wsDash.Cells(rowIdx, 2).NumberFormat = "$#,##0"
+                rowIdx = rowIdx + 1
+            End If
+        End If
+    Next i
+
+    ' Create line chart - position BELOW P&L chart, to the right of performance data
+    Dim chartObj As ChartObject
+    Set chartObj = wsDash.ChartObjects.Add(Left:=420, Top:=980, Width:=400, Height:=220)
+    With chartObj.Chart
+        .ChartType = xlLine
+        .SetSourceData Source:=wsDash.Range("A" & (chartDataStart + 2) & ":B" & (rowIdx - 1))
+        .HasTitle = True
+        .ChartTitle.Text = "Portfolio Value Over Time"
+        .ChartTitle.Font.Size = 12
+        .ChartTitle.Font.Color = COLOR_NAVY_BLUE
+        .HasLegend = False
+
+        ' Format the line
+        With .SeriesCollection(1)
+            .Format.Line.Weight = 2
+            .Format.Line.ForeColor.RGB = COLOR_NAVY_BLUE
+        End With
+
+        ' Format axes
+        .Axes(xlCategory).TickLabels.NumberFormat = "mm/dd"
+        .Axes(xlValue).TickLabels.NumberFormat = "$#,##0,K"
+    End With
+
+    Exit Sub
+
+ErrorHandler:
+    ' Silently fail - chart is optional enhancement
+    On Error GoTo 0
+End Sub

@@ -28,3 +28,9 @@ dist/*/docs/RESPONSES.md
 dist/*_email.zip
 dist/*_protected.zip
 dist/Mobius_Setup.zip
+
+# LaTeX auxiliary files
+*.aux
+*.log
+*.out
+*.toc
