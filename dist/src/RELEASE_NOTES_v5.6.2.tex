@@ -1,0 +1,213 @@
+\documentclass[11pt,letterpaper]{article}
+
+% Packages
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage[most]{tcolorbox}
+\usepackage[T1]{fontenc}
+\usepackage{helvet}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\renewcommand{\familydefault}{\sfdefault}
+
+% Colors (matching the Mobius brand navy)
+\definecolor{mobiusnavy}{RGB}{0,51,102}
+\definecolor{mobiusgray}{RGB}{89,89,89}
+\definecolor{lightgray}{RGB}{242,242,242}
+\definecolor{successgreen}{RGB}{40,167,69}
+\definecolor{warningorange}{RGB}{255,152,0}
+
+% Header/Footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{mobiusgray}{\small Mobius Portfolio Reporter}}
+\fancyhead[R]{\textcolor{mobiusgray}{\small Release Notes v5.6.2}}
+\fancyfoot[C]{\textcolor{mobiusgray}{\thepage}}
+\renewcommand{\headrulewidth}{0.5pt}
+
+% Section formatting
+\titleformat{\section}
+    {\Large\bfseries\color{mobiusnavy}}
+    {\thesection}{1em}{}
+\titleformat{\subsection}
+    {\large\bfseries\color{mobiusnavy}}
+    {\thesubsection}{1em}{}
+
+% Custom boxes
+\newtcolorbox{highlightbox}{
+    colback=lightgray,
+    colframe=mobiusnavy,
+    fonttitle=\bfseries,
+    title=Highlight
+}
+
+\newtcolorbox{newfeaturebox}{
+    colback=successgreen!10,
+    colframe=successgreen,
+    fonttitle=\bfseries,
+    title=New Feature
+}
+
+\newtcolorbox{improvementbox}{
+    colback=warningorange!10,
+    colframe=warningorange,
+    fonttitle=\bfseries,
+    title=Improvement
+}
+
+\begin{document}
+
+% Title
+\begin{center}
+    \includegraphics[width=1.5in]{logo.jpg}\\[0.5em]
+    {\Huge\bfseries\textcolor{mobiusnavy}{Portfolio Reporter}}\\[0.3em]
+    {\Large\textcolor{mobiusgray}{Release Notes --- Version 5.6.2}}\\[0.3em]
+    {\large January 2026}
+\end{center}
+
+\vspace{1em}
+
+\section*{What's New in v5.6.2}
+
+This release focuses on improving the Outlook email monitoring system and refining the Excel report layout. Key improvements include removing the startup popup, adding persistent email tracking, automatic file archiving, and cleaner data presentation.
+
+%----------------------------------------------------------------------
+\section{Outlook Email Monitor Enhancements}
+%----------------------------------------------------------------------
+
+\subsection*{Removed Startup Popup}
+
+\begin{improvementbox}
+The Outlook monitor no longer displays a startup message when Outlook launches. This was removed based on user feedback to reduce interruptions.
+\end{improvementbox}
+
+\textit{Previous behavior}: A MsgBox appeared every time Outlook started, requiring a click to dismiss.
+
+\textit{New behavior}: The monitor starts silently in the background, logging startup to \texttt{monitor\_log.txt}.
+
+\subsection*{Persistent Email Tracking}
+
+\begin{newfeaturebox}
+Email tracking now persists across Outlook restarts using a file-based tracker instead of in-memory variables.
+\end{newfeaturebox}
+
+\begin{itemize}[nosep]
+    \item Tracker file: \texttt{C:\textbackslash Mobius Reports\textbackslash email\_tracker.txt}
+    \item Format: Stores filename and timestamp for each processed email
+    \item Prevents duplicate processing even if Outlook crashes or is restarted
+    \item Automatically cleans up tracker entries older than 7 days
+\end{itemize}
+
+\subsection*{Automatic File Archiving}
+
+\begin{newfeaturebox}
+After processing emails and generating the transformed report, the original source files are automatically moved to the Archive folder.
+\end{newfeaturebox}
+
+\begin{itemize}[nosep]
+    \item Source files moved from \texttt{Incoming/} to \texttt{Archive/}
+    \item Keeps the Incoming folder clean and organized
+    \item Prevents accidental reprocessing of old files
+    \item Archive folder maintains historical source data for reference
+\end{itemize}
+
+\subsection*{Enhanced Logging}
+
+\begin{improvementbox}
+All email monitor activity is now logged to a persistent log file with timestamps.
+\end{improvementbox}
+
+\begin{itemize}[nosep]
+    \item Log file: \texttt{C:\textbackslash Mobius Reports\textbackslash monitor\_log.txt}
+    \item Logs: Email arrivals, file saves, Excel trigger events, errors
+    \item Includes timestamps for troubleshooting and audit trail
+    \item Improved error handling with detailed error messages
+\end{itemize}
+
+%----------------------------------------------------------------------
+\section{Excel Report Layout Improvements}
+%----------------------------------------------------------------------
+
+\subsection*{Cleaner Tab Headers}
+
+\begin{highlightbox}
+Empty row 1 has been removed from the Stocks and Options tabs. Column headers now start at row 1, making the reports cleaner and easier to read.
+\end{highlightbox}
+
+\begin{center}
+\begin{tabularx}{0.9\textwidth}{lXX}
+\toprule
+\textbf{Tab} & \textbf{Previous Layout} & \textbf{New Layout} \\
+\midrule
+Stocks & Headers at row 2, data at row 4 & Headers at row 1, data at row 3 \\
+Options & Headers at row 2, data at row 5 & Headers at row 1, data at row 4 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\vspace{0.5em}
+\textit{This change makes the tabs consistent with standard spreadsheet layouts and reduces unnecessary scrolling.}
+
+%----------------------------------------------------------------------
+\section*{Technical Summary}
+%----------------------------------------------------------------------
+
+\subsection*{File Structure}
+
+The release includes the following files:
+
+\begin{itemize}[nosep]
+    \item \texttt{files/Portfolio Transformer.xlsm} --- Excel workbook with transformation macros
+    \item \texttt{files/OutlookMonitor.txt} --- VBA code for Outlook email monitoring
+    \item \texttt{files/TransformerMacro.txt} --- Excel VBA macro source code (for reference)
+    \item \texttt{docs/SETUP\_GUIDE.pdf} --- Detailed setup and installation instructions
+    \item \texttt{docs/RELEASE\_NOTES\_v5.6.2.pdf} --- This document
+\end{itemize}
+
+\subsection*{Installation Notes}
+
+\begin{highlightbox}
+This release does NOT include an INSTALL.bat file, as .bat files are blocked by Gmail. Manual setup is required following the instructions in SETUP\_GUIDE.pdf.
+\end{highlightbox}
+
+\textbf{Setup Steps:}
+\begin{enumerate}[nosep]
+    \item Create folder structure: \texttt{C:\textbackslash Mobius Reports\textbackslash}
+    \item Create subfolders: \texttt{Incoming}, \texttt{Transformed}, \texttt{Archive}
+    \item Copy \texttt{Portfolio Transformer.xlsm} to \texttt{C:\textbackslash Mobius Reports\textbackslash}
+    \item Follow SETUP\_GUIDE.pdf to configure the Outlook email monitor
+\end{enumerate}
+
+%----------------------------------------------------------------------
+\section*{Summary of Changes}
+%----------------------------------------------------------------------
+
+\begin{center}
+\begin{tabularx}{\textwidth}{clX}
+\toprule
+\textbf{Version} & \textbf{Date} & \textbf{Changes} \\
+\midrule
+5.6.2 & Jan 2026 & Outlook monitor improvements: removed popup, persistent tracking, file archiving, logging; Excel layout: removed empty row 1 \\
+5.6.1 & Dec 2025 & Performance tracking and charts \\
+5.6.0 & Dec 2025 & Column width optimization, text-wrapped headers \\
+5.5 & Dec 2025 & Data accuracy fixes, column width adjustments \\
+5.4 & Dec 2025 & Dashboard with KPIs and charts \\
+5.3 & Dec 2025 & Removed Bloomberg dependency \\
+5.2 & Dec 2025 & Currency formatting, column reordering \\
+5.1 & Dec 2025 & FX conversion for non-USD positions \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\vspace{2em}
+
+\section*{Contact \& Support}
+
+For questions, issues, or feature requests, please contact Jacob.
+
+\end{document}

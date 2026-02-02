@@ -1,0 +1,189 @@
+\documentclass[11pt,letterpaper]{article}
+
+% Packages
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage[most]{tcolorbox}
+\usepackage[T1]{fontenc}
+\usepackage{helvet}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\renewcommand{\familydefault}{\sfdefault}
+
+% Colors (matching the Mobius brand navy)
+\definecolor{mobiusnavy}{RGB}{0,51,102}
+\definecolor{mobiusgray}{RGB}{89,89,89}
+\definecolor{lightgray}{RGB}{242,242,242}
+\definecolor{successgreen}{RGB}{40,167,69}
+\definecolor{warningorange}{RGB}{255,152,0}
+
+% Header/Footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{mobiusgray}{\small Mobius Portfolio Reporter}}
+\fancyhead[R]{\textcolor{mobiusgray}{\small Release Notes v5.6.3}}
+\fancyfoot[C]{\textcolor{mobiusgray}{\thepage}}
+\renewcommand{\headrulewidth}{0.5pt}
+
+% Section formatting
+\titleformat{\section}
+    {\Large\bfseries\color{mobiusnavy}}
+    {\thesection}{1em}{}
+\titleformat{\subsection}
+    {\large\bfseries\color{mobiusnavy}}
+    {\thesubsection}{1em}{}
+
+% Custom boxes
+\newtcolorbox{highlightbox}{
+    colback=lightgray,
+    colframe=mobiusnavy,
+    fonttitle=\bfseries,
+    title=Highlight
+}
+
+\newtcolorbox{fixbox}{
+    colback=successgreen!10,
+    colframe=successgreen,
+    fonttitle=\bfseries,
+    title=Bug Fix
+}
+
+\newtcolorbox{improvementbox}{
+    colback=warningorange!10,
+    colframe=warningorange,
+    fonttitle=\bfseries,
+    title=Improvement
+}
+
+\begin{document}
+
+% Title
+\begin{center}
+    \includegraphics[width=1.5in]{logo.jpg}\\[0.5em]
+    {\Huge\bfseries\textcolor{mobiusnavy}{Portfolio Reporter}}\\[0.3em]
+    {\Large\textcolor{mobiusgray}{Release Notes --- Version 5.6.3}}\\[0.3em]
+    {\large January 2026}
+\end{center}
+
+\vspace{1em}
+
+\section*{What's New in v5.6.3}
+
+This release focuses on critical fixes to the Total Portfolio Value calculation and improvements to the Portfolio Allocation display. These fixes ensure that all portfolio positions are properly accounted for in the total value calculation, including cash positions and options market value.
+
+%----------------------------------------------------------------------
+\section{Total Portfolio Value Calculation Fixes}
+%----------------------------------------------------------------------
+
+\subsection*{Cash Positions Now Included}
+
+\begin{fixbox}
+Cash positions (USD, CAD, etc.) are now properly included in the Total Portfolio Value calculation. Previously, cash balances were missing from the total, resulting in an understated portfolio value.
+\end{fixbox}
+
+\textit{Previous behavior}: Cash positions in the portfolio were not included in the Total Portfolio Value calculation on the Dashboard.
+
+\textit{New behavior}: All cash positions (USD, CAD, and other currencies) are now included in the total, providing an accurate complete portfolio valuation.
+
+\textbf{Impact}: This fix ensures that the Total Portfolio Value accurately reflects all assets under management, including liquid cash positions.
+
+\subsection*{Options Market Value Now Included}
+
+\begin{fixbox}
+Options market value is now properly included in the Total Portfolio Value calculation. Previously, only the Options P\&L (profit/loss) was included, not the actual market value of the options positions.
+\end{fixbox}
+
+\textit{Previous behavior}: Only the Options P\&L component was added to the Total Portfolio Value, which did not accurately represent the total market value of options holdings.
+
+\textit{New behavior}: The full market value of all options positions is now included in the Total Portfolio Value calculation.
+
+\textbf{Impact}: This fix provides a more accurate representation of the total portfolio value by including the complete market value of options positions rather than just their unrealized gains/losses.
+
+%----------------------------------------------------------------------
+\section{Portfolio Allocation Display Improvements}
+%----------------------------------------------------------------------
+
+\subsection*{Dollar Signs Added to Allocation Values}
+
+\begin{improvementbox}
+The Portfolio Allocation section on the Dashboard now displays dollar signs (\$) on all monetary values for improved clarity and consistency.
+\end{improvementbox}
+
+\textit{Previous behavior}: Values in the Portfolio Allocation section were displayed as numbers without currency symbols.
+
+\textit{New behavior}: All allocation values now display with proper dollar sign formatting (e.g., \$1,234,567.89).
+
+\textbf{Impact}: This improvement makes the Dashboard more professional and easier to read at a glance, ensuring all monetary values are clearly identified as currency amounts.
+
+%----------------------------------------------------------------------
+\section*{Technical Summary}
+%----------------------------------------------------------------------
+
+\subsection*{Changes Summary}
+
+\begin{itemize}[nosep]
+    \item Total Portfolio Value calculation updated to include cash positions (USD, CAD, etc.)
+    \item Total Portfolio Value calculation updated to include full Options market value
+    \item Portfolio Allocation section values now formatted with dollar signs
+\end{itemize}
+
+\subsection*{File Structure}
+
+The release includes the following files:
+
+\begin{itemize}[nosep]
+    \item \texttt{files/Portfolio Transformer.xlsm} --- Excel workbook with transformation macros
+    \item \texttt{files/OutlookMonitor.txt} --- VBA code for Outlook email monitoring
+    \item \texttt{files/TransformerMacro.txt} --- Excel VBA macro source code (for reference)
+    \item \texttt{docs/SETUP\_GUIDE.pdf} --- Detailed setup and installation instructions
+    \item \texttt{docs/RELEASE\_NOTES\_v5.6.3.pdf} --- This document
+\end{itemize}
+
+\subsection*{Update Instructions}
+
+\begin{highlightbox}
+For existing users: Simply replace the existing \texttt{Portfolio Transformer.xlsm} file in \texttt{C:\textbackslash Mobius Reports\textbackslash} and update the Outlook monitor code. All changes are automatic and require no additional configuration.
+\end{highlightbox}
+
+\textbf{Update Steps:}
+\begin{enumerate}[nosep]
+    \item Replace \texttt{Portfolio Transformer.xlsm} in \texttt{C:\textbackslash Mobius Reports\textbackslash}
+    \item In Outlook: Press Alt+F11, open ThisOutlookSession
+    \item Paste contents of \texttt{OutlookMonitor.txt} (replacing existing code)
+    \item Save and restart Outlook
+\end{enumerate}
+
+%----------------------------------------------------------------------
+\section*{Version History Summary}
+%----------------------------------------------------------------------
+
+\begin{center}
+\begin{tabularx}{\textwidth}{clX}
+\toprule
+\textbf{Version} & \textbf{Date} & \textbf{Changes} \\
+\midrule
+5.6.3 & Jan 2026 & Fixed Total Portfolio Value to include cash positions and Options market value; Added dollar signs to Portfolio Allocation section \\
+5.6.2 & Jan 2026 & Outlook monitor improvements: removed popup, persistent tracking, file archiving, logging; Excel layout: removed empty row 1 \\
+5.6.1 & Dec 2025 & Performance tracking and charts \\
+5.6.0 & Dec 2025 & Column width optimization, text-wrapped headers \\
+5.5 & Dec 2025 & Data accuracy fixes, column width adjustments \\
+5.4 & Dec 2025 & Dashboard with KPIs and charts \\
+5.3 & Dec 2025 & Removed Bloomberg dependency \\
+5.2 & Dec 2025 & Currency formatting, column reordering \\
+5.1 & Dec 2025 & FX conversion for non-USD positions \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\vspace{2em}
+
+\section*{Contact \& Support}
+
+For questions, issues, or feature requests, please contact Jacob.
+
+\end{document}

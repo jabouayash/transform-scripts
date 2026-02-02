@@ -1,0 +1,239 @@
+\documentclass[11pt,letterpaper]{article}
+
+% Packages
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage[most]{tcolorbox}
+\usepackage[T1]{fontenc}
+\usepackage{helvet}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\renewcommand{\familydefault}{\sfdefault}
+
+% Colors (matching the Mobius brand navy)
+\definecolor{mobiusnavy}{RGB}{0,51,102}
+\definecolor{mobiusgray}{RGB}{89,89,89}
+\definecolor{lightgray}{RGB}{242,242,242}
+\definecolor{successgreen}{RGB}{40,167,69}
+\definecolor{warningorange}{RGB}{255,152,0}
+
+% Header/Footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{mobiusgray}{\small Mobius Portfolio Reporter}}
+\fancyhead[R]{\textcolor{mobiusgray}{\small Release Notes v5.7.0}}
+\fancyfoot[C]{\textcolor{mobiusgray}{\thepage}}
+\renewcommand{\headrulewidth}{0.5pt}
+
+% Section formatting
+\titleformat{\section}
+    {\Large\bfseries\color{mobiusnavy}}
+    {\thesection}{1em}{}
+\titleformat{\subsection}
+    {\large\bfseries\color{mobiusnavy}}
+    {\thesubsection}{1em}{}
+
+% Custom boxes
+\newtcolorbox{highlightbox}{
+    colback=lightgray,
+    colframe=mobiusnavy,
+    fonttitle=\bfseries,
+    title=Highlight
+}
+
+\newtcolorbox{fixbox}{
+    colback=successgreen!10,
+    colframe=successgreen,
+    fonttitle=\bfseries,
+    title=Bug Fix
+}
+
+\newtcolorbox{newfeaturebox}{
+    colback=mobiusnavy!10,
+    colframe=mobiusnavy,
+    fonttitle=\bfseries,
+    title=New Feature
+}
+
+\newtcolorbox{improvementbox}{
+    colback=warningorange!10,
+    colframe=warningorange,
+    fonttitle=\bfseries,
+    title=Improvement
+}
+
+\begin{document}
+
+% Title
+\begin{center}
+    \includegraphics[width=1.5in]{logo.jpg}\\[0.5em]
+    {\Huge\bfseries\textcolor{mobiusnavy}{Portfolio Reporter}}\\[0.3em]
+    {\Large\textcolor{mobiusgray}{Release Notes --- Version 5.7.0}}\\[0.3em]
+    {\large January 2026}
+\end{center}
+
+\vspace{1em}
+
+\section*{What's New in v5.7.0}
+
+This release includes critical fixes to the YTD Return calculation, improved chart readability, and new tabs for better organization of cash positions and administrative items.
+
+%----------------------------------------------------------------------
+\section{YTD Return Calculation Fix}
+%----------------------------------------------------------------------
+
+\begin{fixbox}
+The YTD Return displayed on the Dashboard now reads from Column H (``Jan 1 ROR'') of the Custom file's total row, instead of a calculated P\&L / Market Value ratio. This fixes an issue where the displayed return was approximately 2x the actual fund return.
+\end{fixbox}
+
+\textit{Previous behavior}: YTD Return was calculated as Total P\&L divided by Total Market Value. This calculation was incorrect because the P\&L column shows total gains since each position was opened, not YTD gains.
+
+\textit{New behavior}: YTD Return now reads from Column H of the Custom file's last row (validated by checking Column D = 1.0 for the total row). This is the administrator-provided time-weighted return.
+
+\textbf{Impact}: The Dashboard now shows the correct official YTD return from the source data.
+
+%----------------------------------------------------------------------
+\section{Chart Readability Improvements}
+%----------------------------------------------------------------------
+
+\subsection*{P\&L Chart Label Positioning}
+
+\begin{improvementbox}
+The YTD P\&L: Top Gainers \& Losers chart now positions category labels at the far left of the chart, preventing black text from overlapping with navy blue bars.
+\end{improvementbox}
+
+\textit{Previous behavior}: Stock names were positioned adjacent to the bars, causing black text to overlap with navy blue bars when values were small, making labels unreadable.
+
+\textit{New behavior}: Labels are positioned at the far left edge of the chart using \texttt{xlTickLabelPositionLow}, ensuring they never overlap with bars regardless of bar length.
+
+\subsection*{Label Truncation}
+
+Long stock names are now truncated to 20 characters maximum to prevent overflow issues in charts. Names longer than 20 characters are shortened with ``..'' suffix.
+
+%----------------------------------------------------------------------
+\section{New Tabs for Better Organization}
+%----------------------------------------------------------------------
+
+\subsection*{Currencies Tab}
+
+\begin{newfeaturebox}
+A new ``Currencies'' tab has been added to display cash positions separately from stock holdings.
+\end{newfeaturebox}
+
+Cash positions in the following currencies are now routed to the dedicated Currencies tab:
+\begin{itemize}[nosep]
+    \item USD, CAD, JPY, EUR, GBP
+    \item AED, MAD, CHF, HKD, SGD
+    \item AUD, NZD, CNY, KRW, TWD
+    \item INR, BRL, MXN, ZAR
+\end{itemize}
+
+\subsection*{Other Tab}
+
+\begin{newfeaturebox}
+A new ``Other'' tab has been added to display administrative and expense items separately.
+\end{newfeaturebox}
+
+The following types of items are now routed to the dedicated Other tab:
+\begin{itemize}[nosep]
+    \item Accrued Dividends and Interest
+    \item Payables and Receivables
+    \item Management and Administration Fees
+    \item Tax-related items
+    \item Due From/To Affiliates
+    \item Prepaid Expenses
+    \item Organization Costs
+\end{itemize}
+
+%----------------------------------------------------------------------
+\section{Other Changes}
+%----------------------------------------------------------------------
+
+\begin{itemize}[nosep]
+    \item Output filename now includes both report date and processing date: \texttt{Portfolio\_MMDDYYYY\_gen\_MMDDYYYY.xlsx}
+    \item Removed Fund Performance Summary section from Stocks tab
+    \item Stocks column A expanded for single-line display of names
+    \item Top Holdings bar chart shows biggest holdings at top (reversed axis)
+    \item Gainers/Losers bar chart shows gainers at top (reversed axis)
+    \item Performance chart now shows YTD Return \% instead of portfolio value
+    \item Performance chart Y-axis uses 2\% increments
+    \item Total Portfolio Value now includes all tabs: Stocks + Options + Currencies + Other
+\end{itemize}
+
+%----------------------------------------------------------------------
+\section*{Technical Summary}
+%----------------------------------------------------------------------
+
+\subsection*{Changes Summary}
+
+\begin{itemize}[nosep]
+    \item YTD Return reads from Custom file Column H (``Jan 1 ROR''), last row with data
+    \item Validation: Column D must equal 1.0 to confirm total row
+    \item Output filename format: \texttt{Portfolio\_[reportDate]\_gen\_[processDate].xlsx}
+    \item P\&L chart uses \texttt{xlTickLabelPositionLow} for label positioning
+    \item Stock names truncated to 20 characters in chart data
+    \item New \texttt{IsCurrency()} function for routing cash positions
+    \item New \texttt{IsAdminExpense()} function for routing admin items
+    \item New Currencies worksheet created after Options tab
+    \item New Other worksheet created after Currencies tab
+\end{itemize}
+
+\subsection*{File Structure}
+
+The release includes the following files:
+
+\begin{itemize}[nosep]
+    \item \texttt{files/Portfolio Transformer.xlsm} --- Excel workbook with transformation macros
+    \item \texttt{files/OutlookMonitor.txt} --- VBA code for Outlook email monitoring
+    \item \texttt{files/TransformerMacro.txt} --- Excel VBA macro source code (for reference)
+    \item \texttt{docs/SETUP\_GUIDE.pdf} --- Detailed setup and installation instructions
+    \item \texttt{docs/RELEASE\_NOTES\_v5.7.0.pdf} --- This document
+\end{itemize}
+
+\subsection*{Update Instructions}
+
+\begin{highlightbox}
+For existing users: Simply replace the existing \texttt{Portfolio Transformer.xlsm} file in \texttt{C:\textbackslash Mobius Reports\textbackslash} and update the Outlook monitor code. All changes are automatic and require no additional configuration.
+\end{highlightbox}
+
+\textbf{Update Steps:}
+\begin{enumerate}[nosep]
+    \item Replace \texttt{Portfolio Transformer.xlsm} in \texttt{C:\textbackslash Mobius Reports\textbackslash}
+    \item In Outlook: Press Alt+F11, open ThisOutlookSession
+    \item Paste contents of \texttt{OutlookMonitor.txt} (replacing existing code)
+    \item Save and restart Outlook
+\end{enumerate}
+
+%----------------------------------------------------------------------
+\section*{Version History Summary}
+%----------------------------------------------------------------------
+
+\begin{center}
+\begin{tabularx}{\textwidth}{clX}
+\toprule
+\textbf{Version} & \textbf{Date} & \textbf{Changes} \\
+\midrule
+5.7.0 & Jan 2026 & YTD Return fix (uses K94); Chart label positioning; New Currencies and Other tabs; Removed Fund Performance Summary \\
+5.6.3 & Jan 2026 & Fixed Total Portfolio Value to include cash positions and Options market value \\
+5.6.2 & Jan 2026 & Outlook monitor improvements; Excel layout cleanup \\
+5.6.1 & Dec 2025 & Performance tracking and charts \\
+5.6.0 & Dec 2025 & Column width optimization, text-wrapped headers \\
+5.5 & Dec 2025 & Data accuracy fixes, column width adjustments \\
+5.4 & Dec 2025 & Dashboard with KPIs and charts \\
+5.3 & Dec 2025 & Removed Bloomberg dependency \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\vspace{2em}
+
+\section*{Contact \& Support}
+
+For questions, issues, or feature requests, please contact Jacob.
+
+\end{document}

@@ -9,12 +9,24 @@ Format: [Semantic Versioning](https://semver.org/) - MAJOR.MINOR.PATCH
 
 ---
 
+## [5.7.1] - 2026-02-01
+### Added
+- Auto-open output file after transformation (file now appears in front automatically)
+
+### Fixed
+- Synced distribution files with source code (v5.7.0 dist was missing YTD Column H changes)
+
+---
+
 ## [5.7.0] - 2026-01-22
 ### Added
 - New "Currencies" tab for cash positions (USD, CAD, JPY, EUR, GBP, AED, MAD, etc.)
 - New "Other" tab for admin/expense items (Accrued Dividends, Payables, Management Fees, etc.)
 
 ### Changed
+- **Simplified workflow**: Only Custom email required (Daily Reports email no longer needed)
+- Outlook monitor now triggers immediately on Custom email (no waiting for second email)
+- Output filename now includes both report date and processing date: `Portfolio_MMDDYYYY_gen_MMDDYYYY.xlsx`
 - Removed Fund Performance Summary from Stocks tab
 - Stocks column A expanded to 45 width (names on single line, no text wrap)
 - Top Holdings bar chart now shows biggest holdings at top (reversed axis)
@@ -23,11 +35,14 @@ Format: [Semantic Versioning](https://semver.org/) - MAJOR.MINOR.PATCH
 - Gainers/Losers chart names truncated to 20 chars to prevent overflow
 - Performance chart now shows YTD Return % instead of portfolio value
 - Performance chart Y-axis uses 2% increments
-- YTD Return now uses official K94 value from non-custom file (not calculated P&L/MktValue)
+- YTD Return now reads from Custom file Column H "Jan 1 ROR" (dynamically finds last row)
+- Removed dependency on non-custom file for YTD Return
+- Removed `SetDailyFilePath` function (no longer needed)
 
 ### Fixed
 - Total Portfolio Value now includes: Stocks + Options + Currencies + Other items
-- YTD Return now displays correct official fund return (was showing ~2x actual value)
+- YTD Return now displays correct fund return from source data
+- YTD Return location is now robust (validates Column D = 1.0 to find total row)
 
 ---
 

@@ -1,0 +1,171 @@
+\documentclass[11pt,letterpaper]{article}
+
+% Packages
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage[most]{tcolorbox}
+\usepackage[T1]{fontenc}
+\usepackage{helvet}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\renewcommand{\familydefault}{\sfdefault}
+
+% Colors (matching the Mobius brand navy)
+\definecolor{mobiusnavy}{RGB}{0,51,102}
+\definecolor{mobiusgray}{RGB}{89,89,89}
+\definecolor{lightgray}{RGB}{242,242,242}
+\definecolor{successgreen}{RGB}{40,167,69}
+\definecolor{warningorange}{RGB}{255,152,0}
+
+% Header/Footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{mobiusgray}{\small Mobius Portfolio Reporter}}
+\fancyhead[R]{\textcolor{mobiusgray}{\small Release Notes v5.7.1}}
+\fancyfoot[C]{\textcolor{mobiusgray}{\thepage}}
+\renewcommand{\headrulewidth}{0.5pt}
+
+% Section formatting
+\titleformat{\section}
+    {\Large\bfseries\color{mobiusnavy}}
+    {\thesection}{1em}{}
+\titleformat{\subsection}
+    {\large\bfseries\color{mobiusnavy}}
+    {\thesubsection}{1em}{}
+
+% Custom boxes
+\newtcolorbox{highlightbox}{
+    colback=lightgray,
+    colframe=mobiusnavy,
+    fonttitle=\bfseries,
+    title=Highlight
+}
+
+\newtcolorbox{fixbox}{
+    colback=successgreen!10,
+    colframe=successgreen,
+    fonttitle=\bfseries,
+    title=Bug Fix
+}
+
+\newtcolorbox{newfeaturebox}{
+    colback=mobiusnavy!10,
+    colframe=mobiusnavy,
+    fonttitle=\bfseries,
+    title=New Feature
+}
+
+\newtcolorbox{improvementbox}{
+    colback=warningorange!10,
+    colframe=warningorange,
+    fonttitle=\bfseries,
+    title=Improvement
+}
+
+\begin{document}
+
+% Title
+\begin{center}
+    \includegraphics[width=1.5in]{logo.jpg}\\[0.5em]
+    {\Huge\bfseries\textcolor{mobiusnavy}{Portfolio Reporter}}\\[0.3em]
+    {\Large\textcolor{mobiusgray}{Release Notes --- Version 5.7.1}}\\[0.3em]
+    {\large February 2026}
+\end{center}
+
+\vspace{1em}
+
+\section*{What's New in v5.7.1}
+
+This is a patch release that adds a quality-of-life improvement and fixes a distribution sync issue from v5.7.0.
+
+%----------------------------------------------------------------------
+\section{Auto-Open Output File}
+%----------------------------------------------------------------------
+
+\begin{newfeaturebox}
+The transformed portfolio report now automatically opens and comes to the front after processing completes. No more hunting for the output file in the Transformed folder.
+\end{newfeaturebox}
+
+\textit{Previous behavior}: After transformation, the output file was saved but Excel might show the source file or transformer workbook instead. Users had to manually navigate to the Transformed folder to find their report.
+
+\textit{New behavior}: The output workbook is automatically activated after saving, bringing it to the front of all Excel windows. The report is immediately visible.
+
+\textbf{Impact}: Improved user experience --- the report you need is the one you see.
+
+%----------------------------------------------------------------------
+\section{Distribution Sync Fix}
+%----------------------------------------------------------------------
+
+\begin{fixbox}
+The v5.7.0 distribution package was missing the YTD Return Column H changes. This release ensures all distribution files match the documented v5.7.0 behavior.
+\end{fixbox}
+
+The v5.7.0 distribution incorrectly contained older code that still read YTD Return from cell K94 of the non-custom file. This release corrects the distribution to properly read YTD Return from Column H of the Custom file's last row.
+
+%----------------------------------------------------------------------
+\section*{Technical Summary}
+%----------------------------------------------------------------------
+
+\subsection*{Code Changes}
+
+\begin{itemize}[nosep]
+    \item Added \texttt{wbOutput.Activate} after \texttt{wbOutput.SaveAs} to bring output file to front
+    \item Synced TransformerMacro.txt with root BloombergDataTransformer.vba source
+    \item Updated all version strings from 5.7.0 to 5.7.1
+\end{itemize}
+
+\subsection*{File Structure}
+
+The release includes the following files:
+
+\begin{itemize}[nosep]
+    \item \texttt{files/Portfolio Transformer.xlsm} --- Excel workbook with transformation macros
+    \item \texttt{files/OutlookMonitor.txt} --- VBA code for Outlook email monitoring
+    \item \texttt{files/TransformerMacro.txt} --- Excel VBA macro source code (for reference)
+    \item \texttt{docs/SETUP\_GUIDE.pdf} --- Detailed setup and installation instructions
+    \item \texttt{docs/RELEASE\_NOTES\_v5.7.1.pdf} --- This document
+\end{itemize}
+
+\subsection*{Update Instructions}
+
+\begin{highlightbox}
+For existing users: Simply replace the existing \texttt{Portfolio Transformer.xlsm} file in \texttt{C:\textbackslash Mobius Reports\textbackslash}. No Outlook changes required for this release.
+\end{highlightbox}
+
+\textbf{Update Steps:}
+\begin{enumerate}[nosep]
+    \item Replace \texttt{Portfolio Transformer.xlsm} in \texttt{C:\textbackslash Mobius Reports\textbackslash}
+    \item (Optional) Update Outlook code if coming from pre-5.7.0 version
+\end{enumerate}
+
+%----------------------------------------------------------------------
+\section*{Version History Summary}
+%----------------------------------------------------------------------
+
+\begin{center}
+\begin{tabularx}{\textwidth}{clX}
+\toprule
+\textbf{Version} & \textbf{Date} & \textbf{Changes} \\
+\midrule
+5.7.1 & Feb 2026 & Auto-open output file; Distribution sync fix \\
+5.7.0 & Jan 2026 & YTD Return fix (Column H); Chart label positioning; New Currencies and Other tabs \\
+5.6.3 & Jan 2026 & Fixed Total Portfolio Value to include cash and Options \\
+5.6.2 & Jan 2026 & Outlook monitor improvements; Excel layout cleanup \\
+5.6.0 & Dec 2025 & Performance tracking and charts \\
+5.5 & Dec 2025 & Data accuracy fixes, Dashboard improvements \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\vspace{2em}
+
+\section*{Contact \& Support}
+
+For questions, issues, or feature requests, please contact Jacob.
+
+\end{document}

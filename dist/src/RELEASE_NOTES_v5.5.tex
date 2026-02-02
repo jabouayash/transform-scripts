@@ -1,0 +1,209 @@
+\documentclass[11pt,letterpaper]{article}
+
+% Packages
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage[most]{tcolorbox}
+\usepackage[T1]{fontenc}
+\usepackage{helvet}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\renewcommand{\familydefault}{\sfdefault}
+
+% Colors (matching the Mobius brand navy)
+\definecolor{mobiusnavy}{RGB}{0,51,102}
+\definecolor{mobiusgray}{RGB}{89,89,89}
+\definecolor{lightgray}{RGB}{242,242,242}
+\definecolor{successgreen}{RGB}{40,167,69}
+
+% Header/Footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{mobiusgray}{\small Mobius Portfolio Reporter}}
+\fancyhead[R]{\textcolor{mobiusgray}{\small Release Notes v5.5}}
+\fancyfoot[C]{\textcolor{mobiusgray}{\thepage}}
+\renewcommand{\headrulewidth}{0.5pt}
+
+% Section formatting
+\titleformat{\section}
+    {\Large\bfseries\color{mobiusnavy}}
+    {\thesection}{1em}{}
+\titleformat{\subsection}
+    {\large\bfseries\color{mobiusnavy}}
+    {\thesubsection}{1em}{}
+
+% Custom boxes
+\newtcolorbox{highlightbox}{
+    colback=lightgray,
+    colframe=mobiusnavy,
+    fonttitle=\bfseries,
+    title=Highlight
+}
+
+\newtcolorbox{newfeaturebox}{
+    colback=successgreen!10,
+    colframe=successgreen,
+    fonttitle=\bfseries,
+    title=New Feature
+}
+
+\begin{document}
+
+% Title
+\begin{center}
+    \includegraphics[width=1.5in]{logo.jpg}\\[0.5em]
+    {\Huge\bfseries\textcolor{mobiusnavy}{Portfolio Reporter}}\\[0.3em]
+    {\Large\textcolor{mobiusgray}{Release Notes --- Version 5.5}}\\[0.3em]
+    {\large December 2025}
+\end{center}
+
+\vspace{1em}
+
+\section*{What's New Since v5.1}
+
+This release includes significant enhancements to make the daily portfolio report more useful and easier to read. Key improvements include a new visual dashboard, cleaner number formatting, and improved data accuracy.
+
+%----------------------------------------------------------------------
+\section{Visual Dashboard (v5.4)}
+%----------------------------------------------------------------------
+
+\begin{newfeaturebox}
+The transformed report now includes a \textbf{Dashboard} sheet as the first tab, providing an at-a-glance summary of portfolio performance.
+\end{newfeaturebox}
+
+\subsection*{Key Performance Indicators}
+\begin{itemize}[nosep]
+    \item \textbf{Total Portfolio Value} --- Current market value of all positions
+    \item \textbf{YTD P\&L} --- Year-to-date profit/loss (stocks + options combined)
+    \item \textbf{YTD Return \%} --- Percentage return for the year
+    \item \textbf{Holdings Count} --- Number of active positions (excludes cash)
+\end{itemize}
+
+\subsection*{Charts}
+\begin{itemize}[nosep]
+    \item \textbf{Top 10 Holdings by Market Value} --- Horizontal bar chart showing largest positions
+    \item \textbf{Portfolio Allocation} --- Pie chart showing Top 5 holdings + Other
+    \item \textbf{YTD P\&L: Top Gainers \& Losers} --- Bar chart highlighting best and worst performers
+\end{itemize}
+
+\vspace{1em}
+\begin{center}
+    \fbox{\includegraphics[width=\textwidth]{screenshot-dashboard.png}}
+\end{center}
+\begin{center}
+    \textit{\small Figure 1: The new Dashboard tab provides KPIs and visual charts at a glance.}
+\end{center}
+
+%----------------------------------------------------------------------
+\section{Cleaner Formatting (v5.2)}
+%----------------------------------------------------------------------
+
+Based on stakeholder feedback, the report now displays cleaner, more readable numbers:
+
+\begin{center}
+\begin{tabularx}{0.9\textwidth}{lXX}
+\toprule
+\textbf{Change} & \textbf{Before} & \textbf{After} \\
+\midrule
+Currency symbols removed & \$1,234,567 & 1,234,567 \\
+Prices rounded to nearest dollar & \$156.78 & 157 \\
+Column headers indicate USD & P\&L & P\&L (USD) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\vspace{0.5em}
+\textit{All monetary values are in USD. Headers indicate currency where applicable.}
+
+\subsection*{Column Layout (Stocks Tab)}
+Columns have been reordered for a more logical flow:
+
+\begin{center}
+\begin{tabular}{cl}
+\toprule
+\textbf{Col} & \textbf{Header} \\
+\midrule
+A & Name \\
+B & Ticker \\
+C & Portfolio Wgt \\
+D & \% Diff (Cost) \\
+E & Daily Chg \% \\
+F & Unit Cost \\
+G & Current Px \\
+H & Total Cost \\
+I & Mkt Value \\
+J & P\&L \\
+K & Attribution \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%----------------------------------------------------------------------
+\section{No Bloomberg Required (v5.3)}
+%----------------------------------------------------------------------
+
+\begin{highlightbox}
+The report no longer requires Bloomberg Terminal access. All data comes directly from the daily NAV reports.
+\end{highlightbox}
+
+\begin{itemize}[nosep]
+    \item Stock prices are read from the ``Today USD'' column in the source file
+    \item Option underlying prices are looked up from stock positions in the same report
+    \item Foreign currency positions (Japan, Europe, etc.) are automatically converted to USD
+\end{itemize}
+
+%----------------------------------------------------------------------
+\section{Data Accuracy Improvements (v5.5)}
+%----------------------------------------------------------------------
+
+Several data accuracy issues have been resolved:
+
+\begin{itemize}[nosep]
+    \item \textbf{Dashboard YTD P\&L} now includes both Stocks and Options P\&L (previously showed only Stocks)
+    \item \textbf{Portfolio Allocation ``Other''} now sums correctly to Total Portfolio Value
+    \item \textbf{Options expiry dates} display as MM/DD/YYYY (previously showed Excel serial numbers)
+    \item \textbf{\#DIV/0! errors} prevented on positions with zero cost basis
+    \item \textbf{Holdings count} excludes cash positions (USD, JPY, CAD, EUR, GBP)
+    \item \textbf{GOOG options} now correctly look up GOOGL stock price
+\end{itemize}
+
+%----------------------------------------------------------------------
+\section*{Summary of Changes}
+%----------------------------------------------------------------------
+
+\begin{center}
+\begin{tabularx}{\textwidth}{clX}
+\toprule
+\textbf{Version} & \textbf{Date} & \textbf{Changes} \\
+\midrule
+5.5 & Dec 2025 & Data accuracy fixes, column width adjustments \\
+5.4 & Dec 2025 & Dashboard with KPIs and charts \\
+5.3 & Dec 2025 & Removed Bloomberg dependency \\
+5.2 & Dec 2025 & Currency formatting, column reordering, price rounding \\
+5.1 & Dec 2025 & FX conversion for non-USD positions \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\vspace{2em}
+
+%----------------------------------------------------------------------
+\section*{How It Works}
+%----------------------------------------------------------------------
+
+The system automatically processes daily NAV report emails and generates formatted portfolio reports:
+
+\begin{center}
+    \includegraphics[width=\textwidth]{workflow-diagram.png}
+\end{center}
+\begin{center}
+    \textit{\small Figure 2: Automated workflow from email arrival to formatted report output.}
+\end{center}
+
+
+\end{document}

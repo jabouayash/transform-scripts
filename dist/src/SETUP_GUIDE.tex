@@ -1,0 +1,316 @@
+\documentclass[11pt,letterpaper]{article}
+
+% Packages
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage[most]{tcolorbox}
+\usepackage[T1]{fontenc}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+
+% Colors (matching the Mobius brand navy)
+\definecolor{mobiusnavy}{RGB}{0,51,102}
+\definecolor{mobiusgray}{RGB}{89,89,89}
+\definecolor{lightgray}{RGB}{242,242,242}
+
+% Header/Footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{mobiusgray}{\small Mobius Portfolio Reporter}}
+\fancyhead[R]{\textcolor{mobiusgray}{\small Setup Guide v5.7.1}}
+\fancyfoot[C]{\textcolor{mobiusgray}{\thepage}}
+\renewcommand{\headrulewidth}{0.5pt}
+
+% Section formatting
+\titleformat{\section}
+    {\Large\bfseries\color{mobiusnavy}}
+    {\thesection}{1em}{}
+\titleformat{\subsection}
+    {\large\bfseries\color{mobiusnavy}}
+    {\thesubsection}{1em}{}
+
+% Custom boxes
+\newtcolorbox{notebox}{
+    colback=lightgray,
+    colframe=mobiusnavy,
+    fonttitle=\bfseries,
+    title=Note
+}
+
+\newtcolorbox{warningbox}{
+    colback=yellow!10,
+    colframe=orange!80!black,
+    fonttitle=\bfseries,
+    title=Important
+}
+
+% Screenshot placeholder command
+\newcommand{\screenshot}[1]{
+    \begin{center}
+    \fbox{\parbox{0.8\textwidth}{
+        \centering
+        \vspace{2cm}
+        \textcolor{mobiusgray}{\textit{[Screenshot: #1]}}
+        \vspace{2cm}
+    }}
+    \end{center}
+}
+
+\begin{document}
+
+% Title Page
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+
+    {\Huge\bfseries\textcolor{mobiusnavy}{Mobius Portfolio Reporter}}
+
+    \vspace{0.5cm}
+
+    {\LARGE Setup Guide}
+
+    \vspace{0.3cm}
+
+    {\large Version 5.7.1}
+
+    \vspace{2cm}
+
+    \includegraphics[width=0.4\textwidth]{logo.jpg}
+
+    \vfill
+
+    {\large\textcolor{mobiusgray}{February 2026}}
+
+\end{titlepage}
+
+% Table of Contents
+\tableofcontents
+\newpage
+
+% ============================================================
+\section{Overview}
+% ============================================================
+
+The Mobius Portfolio Reporter automates the transformation of daily NAV report emails into formatted portfolio reports.
+
+\begin{notebox}
+\textbf{Already set up?} If you have previously installed the Portfolio Reporter, you only need to replace the \texttt{Portfolio Transformer.xlsm} file in \texttt{C:\textbackslash Mobius Reports\textbackslash}. Skip to Section 5 (Daily Workflow) for usage instructions.
+\end{notebox}
+
+\subsection{What This System Does}
+
+\begin{enumerate}
+    \item Monitors your Outlook inbox for incoming NAV report emails
+    \item Automatically saves Excel attachments to a designated folder
+    \item Transforms the data into a formatted portfolio report with Dashboard
+    \item Saves the completed report for review
+\end{enumerate}
+
+\subsection{Prerequisites}
+
+Before beginning setup, ensure you have:
+
+\begin{itemize}
+    \item Microsoft Outlook (desktop application, not "New Outlook")
+    \item Microsoft Excel with macro support
+    \item Administrator access to your computer (for initial setup only)
+\end{itemize}
+
+\newpage
+
+% ============================================================
+\section{Installation}
+% ============================================================
+
+\subsection{Step 1: Run the Installer}
+
+\begin{enumerate}
+    \item Locate the file \texttt{INSTALL.bat} in this package
+    \item Double-click to run
+    \item If prompted by Windows Security, click \textbf{Run anyway}
+\end{enumerate}
+
+\begin{notebox}
+The installer creates the following folder structure on your C: drive:
+\begin{itemize}[noitemsep]
+    \item \texttt{C:\textbackslash Mobius Reports\textbackslash Incoming} -- where email attachments are saved
+    \item \texttt{C:\textbackslash Mobius Reports\textbackslash Transformed} -- where completed reports appear
+    \item \texttt{C:\textbackslash Mobius Reports\textbackslash Archive} -- processed files are moved here
+\end{itemize}
+\end{notebox}
+
+\begin{center}
+\includegraphics[width=0.9\textwidth]{screenshot-folders.png}
+\end{center}
+
+\newpage
+
+% ============================================================
+\section{Outlook Configuration}
+% ============================================================
+
+This section configures Outlook to automatically detect and process incoming NAV report emails.
+
+\subsection{Step 2: Open the VBA Editor}
+
+\begin{enumerate}
+    \item Open Microsoft Outlook
+    \item Press \textbf{Alt + F11} on your keyboard
+    \item The Visual Basic for Applications editor will open
+\end{enumerate}
+
+\begin{center}
+\includegraphics[width=0.95\textwidth]{screenshot-vba-editor.png}
+\end{center}
+
+\subsection{Step 3: Locate ThisOutlookSession}
+
+\begin{enumerate}
+    \item In the left panel, find \textbf{Microsoft Outlook Objects}
+    \item Click the arrow to expand it
+    \item Double-click \textbf{ThisOutlookSession}
+    \item A blank code window will open on the right
+\end{enumerate}
+
+% Screenshot already shown above - ThisOutlookSession visible in left panel
+
+\subsection{Step 4: Paste the Monitor Code}
+
+\begin{enumerate}
+    \item Open the file \texttt{files\textbackslash OutlookMonitor.txt} from this package
+    \item Select all the code (\textbf{Ctrl + A})
+    \item Copy the code (\textbf{Ctrl + C})
+    \item Click inside the ThisOutlookSession window in Outlook
+    \item Paste the code (\textbf{Ctrl + V})
+    \item Save (\textbf{Ctrl + S})
+    \item Close the VBA Editor
+\end{enumerate}
+
+\begin{warningbox}
+Make sure you copy ALL of the code from OutlookMonitor.txt. Partial code will cause errors.
+\end{warningbox}
+
+\subsection{Step 5: Enable Macros in Outlook}
+
+\begin{enumerate}
+    \item In Outlook, click \textbf{File} in the top menu
+    \item Click \textbf{Options} (bottom of the left panel)
+    \item Click \textbf{Trust Center} (bottom of the list)
+    \item Click \textbf{Trust Center Settings...}
+    \item Click \textbf{Macro Settings}
+    \item Select \textbf{Enable all macros}
+    \item Click \textbf{OK} twice to close
+    \item \textbf{Restart Outlook completely} (close and reopen)
+\end{enumerate}
+
+\begin{center}
+\includegraphics[width=0.95\textwidth]{screenshot-trust-center.png}
+\end{center}
+
+\newpage
+
+% ============================================================
+\section{Testing the System}
+% ============================================================
+
+\subsection{Step 6: Verify Installation}
+
+Open File Explorer and confirm these folders exist:
+
+\begin{itemize}
+    \item \texttt{C:\textbackslash Mobius Reports\textbackslash Incoming}
+    \item \texttt{C:\textbackslash Mobius Reports\textbackslash Transformed}
+    \item \texttt{C:\textbackslash Mobius Reports\textbackslash Archive}
+\end{itemize}
+
+Also verify that \texttt{Portfolio Transformer.xlsm} is present in \texttt{C:\textbackslash Mobius Reports\textbackslash}
+
+\subsection{Step 7: Test with a Sample Email}
+
+\begin{enumerate}
+    \item Ask a colleague to forward you a recent NAV report email
+    \item When the email arrives, Outlook should display a popup: \\\textit{``Mobius Report Monitor is now active''}
+    \item The system will automatically:
+    \begin{itemize}
+        \item Save the Excel attachment to the Incoming folder
+        \item Open the Portfolio Transformer
+        \item Process the data
+        \item Save the result to the Transformed folder
+    \end{itemize}
+    \item Check \texttt{C:\textbackslash Mobius Reports\textbackslash Transformed} for your output file
+\end{enumerate}
+
+\newpage
+
+% ============================================================
+\section{Daily Workflow}
+% ============================================================
+
+Once configured, the system runs automatically. Your daily workflow is:
+
+\begin{enumerate}
+    \item \textbf{Receive Email} -- The Custom daily portfolio report email arrives in your inbox
+    \item \textbf{Automatic Processing} -- Outlook detects the email and triggers Excel
+    \item \textbf{Review Output} -- The transformed report opens automatically
+\end{enumerate}
+
+The output includes a Dashboard tab with charts and KPIs, plus detailed Stocks and Options tabs.
+
+\vspace{0.5cm}
+\textbf{Sample Output -- Stocks Tab:}
+\begin{center}
+\includegraphics[width=\textwidth]{screenshot-output.png}
+\end{center}
+
+\vspace{0.5cm}
+\textbf{Sample Output -- Options Tab:}
+\begin{center}
+\includegraphics[width=\textwidth]{screenshot-options.png}
+\end{center}
+
+\newpage
+
+% ============================================================
+\section{Troubleshooting}
+% ============================================================
+
+\subsection{``Macros have been disabled''}
+
+\begin{itemize}
+    \item In Excel: File $\rightarrow$ Options $\rightarrow$ Trust Center $\rightarrow$ Macro Settings $\rightarrow$ Enable all macros
+    \item In Outlook: Same path, then restart Outlook
+\end{itemize}
+
+\subsection{Emails are not being processed}
+
+\begin{itemize}
+    \item Verify the code is pasted in ThisOutlookSession (not a different module)
+    \item Confirm macros are enabled in Outlook
+    \item Restart Outlook after making any changes
+    \item Ensure you're using Classic Outlook (not ``New Outlook'')
+\end{itemize}
+
+\subsection{Report not generating}
+
+\begin{itemize}
+    \item Check \texttt{C:\textbackslash Mobius Reports\textbackslash Incoming} for the attachment file
+    \item Ensure \texttt{Portfolio Transformer.xlsm} exists in \texttt{C:\textbackslash Mobius Reports}
+    \item Only the Custom daily portfolio report email is required (as of v5.7.0)
+\end{itemize}
+
+\vspace{1cm}
+
+\begin{center}
+\rule{0.5\textwidth}{0.5pt}
+
+\vspace{0.5cm}
+
+\textcolor{mobiusgray}{\textit{For additional support, contact Jacob.}}
+\end{center}
+
+\end{document}
