@@ -8,7 +8,7 @@ VBA-based automation for transforming daily NAV reports into portfolio reports. 
 1. **Outlook VBA** - Monitors inbox, saves Custom attachment, triggers transformation
 2. **Excel VBA** - Transforms data into Dashboard + Stocks + Options + Currencies + Other tabs
 
-## Architecture (v5.7.1 - Simplified)
+## Architecture (v5.7.2 - Simplified)
 
 ```
 Outlook (monitors inbox)

@@ -9,6 +9,13 @@ Format: [Semantic Versioning](https://semver.org/) - MAJOR.MINOR.PATCH
 
 ---
 
+## [5.7.2] - 2026-02-03
+### Added
+- Auto-email report to self after transformation (sends to current Outlook user)
+- New `EMAIL_ENABLED` config constant (set to False to disable)
+
+---
+
 ## [5.7.1] - 2026-02-01
 ### Added
 - Auto-open output file after transformation (file now appears in front automatically)
