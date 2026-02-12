@@ -51,23 +51,24 @@ Excel (transforms data)
 
 ## Key Code Locations
 
-### OutlookMonitor.txt
+### OutlookEmailMonitor.vba (root, source of truth → dist as OutlookMonitor.txt)
 - `Application_Startup` - Initializes monitor on Outlook launch
 - `InboxItems_ItemAdd` - Event handler for new emails
 - `ProcessIncomingEmail` - Checks subject, extracts date, saves attachments
 - `StripForwardPrefixes` - Removes FW:/RE: prefixes (handles multiples)
 - `TriggerTransformation` - Launches Excel immediately (no waiting for second email)
 
-### BloombergDataTransformer.vba
+### BloombergDataTransformer.vba (root, source of truth → dist as TransformerMacro.txt)
 - `TransformBloombergData` - Main entry point
 - `ReadYTDFundReturn(ws)` - Reads YTD Return from Custom file Column H (last row)
 - `ProcessStock` / `ProcessOption` - Maps source columns to output
 - `IsCurrency` / `IsAdminExpense` - Routes positions to Currencies/Other tabs
 - `CreateDashboard` - Creates summary dashboard with KPIs and charts
+- `EmailReportToSelf` - Emails output file to current Outlook user after transformation
 
 ## Configuration Constants
 
-In `OutlookMonitor.txt`:
+In `OutlookEmailMonitor.vba`:
 ```vba
 Private Const BASE_FOLDER As String = "C:\Mobius Reports"
 Private Const INCOMING_FOLDER As String = "C:\Mobius Reports\Incoming"
@@ -114,23 +115,24 @@ When creating a new version release, ALL of the following steps MUST be complete
 
 Update version numbers in these locations:
 
-**Root files:**
+**Root files (source of truth):**
 - `BloombergDataTransformer.vba` line 2: `' Portfolio Data Transformer - Version X.Y.Z`
 - `BloombergDataTransformer.vba` MsgBox: `"Portfolio Data Transformer vX.Y.Z"`
 - `BloombergDataTransformer.vba` Dashboard title: `"PORTFOLIO DASHBOARD (vX.Y.Z)"`
+- `OutlookEmailMonitor.vba` line 2: `' Mobius Portfolio Report - Outlook Email Monitor (vX.Y.Z - Simplified)`
+- `OutlookEmailMonitor.vba` RunManualTest msg: `"=== Mobius Report Monitor Test (vX.Y.Z) ==="`
 - `CLAUDE.md` Architecture header: `## Architecture (vX.Y.Z - Simplified)`
 - `CHANGELOG.md` - Add new version entry at top
 
 **Dist files (in `dist/Mobius_Portfolio_Reporter_vX.Y.Z/files/`):**
 - `TransformerMacro.txt` - Same 3 locations as BloombergDataTransformer.vba
-- `OutlookMonitor.txt` line 2: `' Mobius Portfolio Report - Outlook Email Monitor (vX.Y.Z - Simplified)`
-- `OutlookMonitor.txt` RunManualTest msg: `"=== Mobius Report Monitor Test (vX.Y.Z) ==="`
+- `OutlookMonitor.txt` - Same 2 locations as OutlookEmailMonitor.vba
 
 ### 2. Sync VBA Code
 
-Copy root `BloombergDataTransformer.vba` to `dist/.../files/TransformerMacro.txt`
-- Do NOT just copy-paste the old dist version
-- The root file is the source of truth
+Copy root files to dist. Root files are the source of truth - NEVER copy from old dist versions.
+- `BloombergDataTransformer.vba` → `dist/.../files/TransformerMacro.txt`
+- `OutlookEmailMonitor.vba` → `dist/.../files/OutlookMonitor.txt`
 
 ### 3. Create/Update Documentation
 

@@ -1,10 +1,12 @@
 ' ====================================================================
-' Mobius Portfolio Report - Outlook Email Monitor
+' Mobius Portfolio Report - Outlook Email Monitor (v5.7.2 - Simplified)
 ' ====================================================================
 ' PURPOSE:
 '   Automatically monitors incoming emails for daily NAV reports,
-'   saves attachments, and triggers Excel transformation when both
-'   required emails arrive.
+'   saves attachments, and triggers Excel transformation.
+'
+' NOTE: As of v5.7.0, only the Custom email is required. The Daily Reports
+'   email is no longer needed since YTD Return is now read from the Custom file.
 '
 ' SETUP:
 '   1. Open Outlook
@@ -15,13 +17,12 @@
 '   6. When prompted about macros, click "Enable Macros"
 '
 ' TESTING:
-'   - Forward the two daily emails to yourself
+'   - Forward the Custom daily portfolio report email to yourself
 '   - The script handles "FW:" and "Fwd:" prefixes automatically
 '   - Or use: Tools > Macros > RunManualTest
 '
-' EMAILS MONITORED:
-'   1. "Mobius Emerging Opportunities Fund LP| Custom daily portfolio report MMDDYYYY"
-'   2. "Mobius Emerging Opportunities Fund LP| Daily Reports MMDDYYYY"
+' EMAIL MONITORED:
+'   "Mobius Emerging Opportunities Fund LP| Custom daily portfolio report MMDDYYYY"
 '
 ' ====================================================================
 
@@ -35,13 +36,11 @@ Private Const INCOMING_FOLDER As String = "C:\Mobius Reports\Incoming"
 Private Const TRANSFORMED_FOLDER As String = "C:\Mobius Reports\Transformed"
 Private Const ARCHIVE_FOLDER As String = "C:\Mobius Reports\Archive"
 
-' Email subject patterns (without date)
+' Email subject pattern (without date)
 Private Const SUBJECT_CUSTOM As String = "Mobius Emerging Opportunities Fund LP| Custom daily portfolio report"
-Private Const SUBJECT_DAILY As String = "Mobius Emerging Opportunities Fund LP| Daily Reports"
 
-' File name patterns to save
+' File name pattern to save
 Private Const FILE_CUSTOM As String = "Gain And Exposure_Custom_MOBIUS EMERGING OPPORTUNITIES FUND LP"
-Private Const FILE_DAILY As String = "Gain And Exposure_MOBIUS EMERGING OPPORTUNITIES FUND LP"
 
 ' Path to your Excel transformer workbook (with the VBA macro)
 Private Const EXCEL_TRANSFORMER_PATH As String = "C:\Mobius Reports\Portfolio Transformer.xlsm"
@@ -53,8 +52,8 @@ Private Const TRACKER_FILE As String = "C:\Mobius Reports\email_tracker.txt"
 ' ============================================
 ' TRACKING VARIABLES
 ' ============================================
-' Dictionary to track which emails have arrived for each date
-' Key = date string (MMDDYYYY), Value = "CUSTOM", "DAILY", or "BOTH"
+' Dictionary to track which dates have been processed
+' Key = date string (MMDDYYYY), Value = "PROCESSED"
 Private emailTracker As Object
 
 ' ============================================
@@ -112,40 +111,41 @@ Private Sub ProcessIncomingEmail(mail As Outlook.MailItem)
     Dim subject As String
     Dim cleanedSubject As String
     Dim reportDate As String
-    Dim emailType As String
 
     subject = mail.subject
 
     ' Remove FW:/Fwd: prefixes for testing with forwarded emails
     cleanedSubject = StripForwardPrefixes(subject)
 
-    ' Check if this matches our patterns
-    If InStr(1, cleanedSubject, SUBJECT_CUSTOM, vbTextCompare) > 0 Then
-        emailType = "CUSTOM"
-        reportDate = ExtractDateFromSubject(cleanedSubject, SUBJECT_CUSTOM)
-    ElseIf InStr(1, cleanedSubject, SUBJECT_DAILY, vbTextCompare) > 0 Then
-        emailType = "DAILY"
-        reportDate = ExtractDateFromSubject(cleanedSubject, SUBJECT_DAILY)
-    Else
+    ' Check if this matches the Custom portfolio report pattern
+    If InStr(1, cleanedSubject, SUBJECT_CUSTOM, vbTextCompare) = 0 Then
         ' Not a target email, ignore
         Exit Sub
     End If
+
+    reportDate = ExtractDateFromSubject(cleanedSubject, SUBJECT_CUSTOM)
 
     If reportDate = "" Then
         Call WriteLog("Could not extract date from subject: " & subject)
         Exit Sub
     End If
 
-    ' Save attachments
-    Call SaveAttachments(mail, emailType, reportDate)
-
-    ' Update tracker
-    Call UpdateTracker(reportDate, emailType)
-
-    ' Check if we have both emails now
-    If emailTracker(reportDate) = "BOTH" Then
-        Call TriggerTransformation(reportDate)
+    ' Check if we already processed this date
+    If emailTracker.Exists(reportDate) Then
+        Call WriteLog("Already processed report for " & FormatReportDate(reportDate) & ", skipping")
+        Exit Sub
     End If
+
+    ' Save attachments
+    Call SaveAttachments(mail, reportDate)
+
+    ' Mark as processed and trigger transformation
+    emailTracker(reportDate) = "PROCESSED"
+    Call SaveTracker
+    Call WriteLog("Received Custom report for " & FormatReportDate(reportDate))
+
+    ' Trigger transformation immediately (no waiting for second email)
+    Call TriggerTransformation(reportDate)
 End Sub
 
 Private Function StripForwardPrefixes(subject As String) As String
@@ -194,35 +194,16 @@ Private Function ExtractDateFromSubject(subject As String, pattern As String) As
     End If
 End Function
 
-Private Sub UpdateTracker(reportDate As String, emailType As String)
-    If Not emailTracker.Exists(reportDate) Then
-        emailTracker(reportDate) = emailType
-        Call WriteLog("Received " & emailType & " report for " & FormatReportDate(reportDate))
-    ElseIf emailTracker(reportDate) <> emailType Then
-        ' We now have both types
-        emailTracker(reportDate) = "BOTH"
-        Call WriteLog("Received " & emailType & " report for " & FormatReportDate(reportDate) & " - BOTH now received")
-    End If
-    ' If same type arrives twice, just keep the existing value
-
-    ' Save tracker state to file (survives Outlook restart)
-    Call SaveTracker
-End Sub
-
 ' ============================================
 ' ATTACHMENT SAVING
 ' ============================================
-Private Sub SaveAttachments(mail As Outlook.MailItem, emailType As String, reportDate As String)
+Private Sub SaveAttachments(mail As Outlook.MailItem, reportDate As String)
     Dim att As Outlook.Attachment
     Dim savePath As String
     Dim targetPattern As String
 
-    ' Determine which file pattern to look for
-    If emailType = "CUSTOM" Then
-        targetPattern = FILE_CUSTOM
-    Else
-        targetPattern = FILE_DAILY
-    End If
+    ' Look for the Custom file pattern
+    targetPattern = FILE_CUSTOM
 
     For Each att In mail.Attachments
         ' Check if this attachment matches our target file
@@ -248,44 +229,34 @@ End Sub
 ' ============================================
 Private Sub TriggerTransformation(reportDate As String)
     Dim customFile As String
-    Dim dailyFile As String
     Dim msg As String
 
-    ' Build expected file paths
+    ' Build expected file path
     customFile = INCOMING_FOLDER & "\" & FILE_CUSTOM & "_" & reportDate & ".XLSX"
-    dailyFile = INCOMING_FOLDER & "\" & FILE_DAILY & "_" & reportDate & ".XLSX"
 
-    ' Verify both files exist
+    ' Verify file exists
     If Dir(customFile) = "" Then
         Call WriteLog("ERROR: Custom file not found: " & customFile)
         MsgBox "Custom file not found: " & customFile, vbExclamation, "File Missing"
         Exit Sub
     End If
 
-    If Dir(dailyFile) = "" Then
-        Call WriteLog("ERROR: Daily file not found: " & dailyFile)
-        MsgBox "Daily file not found: " & dailyFile, vbExclamation, "File Missing"
-        Exit Sub
-    End If
-
     ' Notify user
-    msg = "Both daily reports received for " & FormatReportDate(reportDate) & "!" & vbCrLf & vbCrLf
+    msg = "Custom report received for " & FormatReportDate(reportDate) & "!" & vbCrLf & vbCrLf
     msg = msg & "Starting transformation..." & vbCrLf & vbCrLf
-    msg = msg & "Files:" & vbCrLf
-    msg = msg & "- Custom: " & Dir(customFile) & vbCrLf
-    msg = msg & "- Daily: " & Dir(dailyFile)
+    msg = msg & "File: " & Dir(customFile)
 
-    MsgBox msg, vbInformation, "Processing Reports"
+    MsgBox msg, vbInformation, "Processing Report"
 
     ' Launch Excel and run the transformation
-    Call RunExcelTransformation(customFile, dailyFile, reportDate)
+    Call RunExcelTransformation(customFile, reportDate)
 
-    ' Archive processed files
+    ' Archive processed file
     Call ArchiveProcessedFiles(reportDate)
     Call WriteLog("Transformation completed for " & FormatReportDate(reportDate))
 End Sub
 
-Private Sub RunExcelTransformation(customFile As String, dailyFile As String, reportDate As String)
+Private Sub RunExcelTransformation(customFile As String, reportDate As String)
     Dim xlApp As Object
     Dim xlWb As Object
     Dim alreadyOpen As Boolean
@@ -318,11 +289,8 @@ Private Sub RunExcelTransformation(customFile As String, dailyFile As String, re
         Set xlWb = xlApp.Workbooks.Open(EXCEL_TRANSFORMER_PATH)
         xlApp.Workbooks.Open customFile
 
-        ' Store the daily file path for the macro to read K94
-        ' We'll use a named range or environment variable approach
-        xlApp.Run "'" & xlWb.Name & "'!SetDailyFilePath", dailyFile
-
         ' Run the transformation macro
+        ' Note: YTD Return is now read from the Custom file (Column H), no need for dailyFile
         xlApp.Run "'" & xlWb.Name & "'!TransformBloombergData"
 
         MsgBox "Transformation complete!" & vbCrLf & vbCrLf & _
@@ -376,15 +344,14 @@ Public Sub RunManualTest()
         Call InitializeMonitor
     End If
 
-    msg = "=== Mobius Report Monitor Test ===" & vbCrLf & vbCrLf
+    msg = "=== Mobius Report Monitor Test (v5.7.2) ===" & vbCrLf & vbCrLf
     msg = msg & "Status: ACTIVE" & vbCrLf & vbCrLf
-    msg = msg & "Watching for emails with subjects:" & vbCrLf
-    msg = msg & "1. " & SUBJECT_CUSTOM & " [DATE]" & vbCrLf
-    msg = msg & "2. " & SUBJECT_DAILY & " [DATE]" & vbCrLf & vbCrLf
+    msg = msg & "Watching for email with subject:" & vbCrLf
+    msg = msg & SUBJECT_CUSTOM & " [DATE]" & vbCrLf & vbCrLf
     msg = msg & "Folders:" & vbCrLf
     msg = msg & "- Incoming: " & INCOMING_FOLDER & vbCrLf
     msg = msg & "- Output: " & TRANSFORMED_FOLDER & vbCrLf & vbCrLf
-    msg = msg & "To test: Forward both daily emails to yourself."
+    msg = msg & "To test: Forward the Custom portfolio report email to yourself."
 
     MsgBox msg, vbInformation, "Monitor Status"
 End Sub
@@ -560,16 +527,14 @@ Private Sub LoadTracker()
             If InStr(line, "=") > 0 Then
                 parts = Split(line, "=")
                 If UBound(parts) >= 1 Then
-                    ' Only load if not already "BOTH" (already processed)
-                    If parts(1) <> "BOTH" Then
-                        emailTracker(parts(0)) = parts(1)
-                    End If
+                    ' Load processed dates to avoid re-processing
+                    emailTracker(parts(0)) = parts(1)
                 End If
             End If
         Loop
 
         trackerFile.Close
-        Call WriteLog("Loaded tracker state: " & emailTracker.Count & " pending dates")
+        Call WriteLog("Loaded tracker state: " & emailTracker.Count & " processed dates")
     End If
 
     On Error GoTo 0
@@ -579,12 +544,10 @@ End Sub
 ' FILE ARCHIVING - Move processed files
 ' ============================================
 Private Sub ArchiveProcessedFiles(reportDate As String)
-    ' Moves processed files from Incoming to Archive
+    ' Moves processed Custom file from Incoming to Archive
     Dim fso As Object
     Dim customFile As String
-    Dim dailyFile As String
     Dim archiveCustom As String
-    Dim archiveDaily As String
 
     On Error Resume Next
 
@@ -592,22 +555,13 @@ Private Sub ArchiveProcessedFiles(reportDate As String)
 
     ' Build file paths
     customFile = INCOMING_FOLDER & "\" & FILE_CUSTOM & "_" & reportDate & ".XLSX"
-    dailyFile = INCOMING_FOLDER & "\" & FILE_DAILY & "_" & reportDate & ".XLSX"
     archiveCustom = ARCHIVE_FOLDER & "\" & FILE_CUSTOM & "_" & reportDate & ".XLSX"
-    archiveDaily = ARCHIVE_FOLDER & "\" & FILE_DAILY & "_" & reportDate & ".XLSX"
 
     ' Move custom file
     If fso.FileExists(customFile) Then
         If fso.FileExists(archiveCustom) Then fso.DeleteFile archiveCustom
         fso.MoveFile customFile, archiveCustom
         Call WriteLog("Archived: " & FILE_CUSTOM & "_" & reportDate & ".XLSX")
-    End If
-
-    ' Move daily file
-    If fso.FileExists(dailyFile) Then
-        If fso.FileExists(archiveDaily) Then fso.DeleteFile archiveDaily
-        fso.MoveFile dailyFile, archiveDaily
-        Call WriteLog("Archived: " & FILE_DAILY & "_" & reportDate & ".XLSX")
     End If
 
     On Error GoTo 0
